@@ -5,7 +5,7 @@ import { hashToken } from '../../core/auth/tokens.js';
 import { prisma } from '../../core/db/prisma.js';
 import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
-import { authenticate, authOf } from '../../core/middleware/authenticate.js';
+import { authenticate, authOf, forbidImpersonation } from '../../core/middleware/authenticate.js';
 import { requireSameSiteRequest } from '../../core/middleware/csrf.js';
 import { loginLimiter, passwordResetLimiter, refreshLimiter } from '../../core/middleware/rate-limit.js';
 import {
@@ -16,6 +16,7 @@ import {
   TotpConfirmSchema,
   TwoFactorVerifySchema,
 } from './auth.schemas.js';
+import { stopImpersonation } from '../platform/impersonation.service.js';
 import * as auth from './auth.service.js';
 import {
   revokeAllSessions,
@@ -90,18 +91,28 @@ authRouter.post('/auth/logout', requireSameSiteRequest, async (req, res) => {
   res.status(204).end();
 });
 
-authRouter.post('/auth/logout-all', authenticate({ allowRestricted: true }), async (req, res) => {
-  const { userId } = authOf(req);
-  await revokeAllSessions(userId, 'logout_all');
-  await audit({ action: 'auth.logout_all', entity: 'User', entityId: userId });
-  clearRefreshCookie(res);
-  res.status(204).end();
-});
+authRouter.post(
+  '/auth/logout-all',
+  authenticate({ allowRestricted: true }),
+  forbidImpersonation,
+  async (req, res) => {
+    const { userId } = authOf(req);
+    await revokeAllSessions(userId, 'logout_all');
+    await audit({ action: 'auth.logout_all', entity: 'User', entityId: userId });
+    clearRefreshCookie(res);
+    res.status(204).end();
+  },
+);
 
-authRouter.post('/auth/change-password', authenticate({ allowRestricted: true }), async (req, res) => {
-  const { userId, sessionId } = authOf(req);
-  sessionResponse(res, await auth.changePassword(userId, sessionId, parse(ChangePasswordSchema, req.body)));
-});
+authRouter.post(
+  '/auth/change-password',
+  authenticate({ allowRestricted: true }),
+  forbidImpersonation,
+  async (req, res) => {
+    const { userId, sessionId } = authOf(req);
+    sessionResponse(res, await auth.changePassword(userId, sessionId, parse(ChangePasswordSchema, req.body)));
+  },
+);
 
 authRouter.post('/auth/forgot', passwordResetLimiter, async (req, res) => {
   await auth.requestPasswordReset(parse(ForgotPasswordSchema, req.body).email);
@@ -113,19 +124,37 @@ authRouter.post('/auth/reset', passwordResetLimiter, async (req, res) => {
   res.status(204).end();
 });
 
-authRouter.post('/auth/2fa/enroll', authenticate({ allowRestricted: true }), async (req, res) => {
-  const { userId, restriction } = authOf(req);
-  if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
-  res.json(await auth.startTotpEnrollment(userId));
+authRouter.post(
+  '/auth/2fa/enroll',
+  authenticate({ allowRestricted: true }),
+  forbidImpersonation,
+  async (req, res) => {
+    const { userId, restriction } = authOf(req);
+    if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
+    res.json(await auth.startTotpEnrollment(userId));
+  },
+);
+
+// Fin de una sesión de soporte: se llama con el access token de la impersonación.
+authRouter.post('/auth/impersonation/stop', authenticate(), async (req, res) => {
+  const { userId, sessionId, impersonatorId, accountId } = authOf(req);
+  if (!impersonatorId) throw AppError.badRequest('NOT_IMPERSONATING');
+  await stopImpersonation(sessionId, impersonatorId, userId, accountId);
+  res.status(204).end();
 });
 
-authRouter.post('/auth/2fa/confirm', authenticate({ allowRestricted: true }), async (req, res) => {
-  const { userId, sessionId, restriction } = authOf(req);
-  if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
-  const { accessToken } = await auth.confirmTotpEnrollment(
-    userId,
-    sessionId,
-    parse(TotpConfirmSchema, req.body).code,
-  );
-  res.json({ accessToken, restriction: null });
-});
+authRouter.post(
+  '/auth/2fa/confirm',
+  authenticate({ allowRestricted: true }),
+  forbidImpersonation,
+  async (req, res) => {
+    const { userId, sessionId, restriction } = authOf(req);
+    if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
+    const { accessToken } = await auth.confirmTotpEnrollment(
+      userId,
+      sessionId,
+      parse(TotpConfirmSchema, req.body).code,
+    );
+    res.json({ accessToken, restriction: null });
+  },
+);

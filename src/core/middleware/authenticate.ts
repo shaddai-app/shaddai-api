@@ -21,6 +21,8 @@ export interface AuthContext {
   sessionId: string;
   restriction: SessionRestriction;
   accountReadOnly: boolean;
+  /** Superadmin actuando como este usuario (sesión de soporte). */
+  impersonatorId?: number;
   /** Se completa en requirePermission (cacheado). */
   permissions?: PermissionMap;
 }
@@ -59,7 +61,12 @@ export function authenticate(options: { allowRestricted?: boolean } = {}): Reque
     if (claims.ver !== passwordVersion(user)) throw AppError.unauthorized('AUTH_SESSION_REVOKED');
     if (!(await isFamilyActive(claims.sid))) throw AppError.unauthorized('AUTH_SESSION_REVOKED');
 
-    const restriction = restrictionFor(user);
+    const impersonatorId = claims.imp ? Number(claims.imp) : undefined;
+    if (impersonatorId !== undefined) await assertValidImpersonator(impersonatorId);
+
+    // En soporte, las restricciones del usuario (ej. cambio de contraseña pendiente) no aplican:
+    // el superadmin nunca completa esos pasos por él (ver forbidImpersonation).
+    const restriction = impersonatorId ? null : restrictionFor(user);
     if (restriction && !options.allowRestricted) throw AppError.forbidden(RESTRICTION_ERRORS[restriction]);
 
     req.auth = {
@@ -69,15 +76,34 @@ export function authenticate(options: { allowRestricted?: boolean } = {}): Reque
       sessionId: claims.sid,
       restriction,
       accountReadOnly: isAccountReadOnly(user.account),
+      impersonatorId,
     };
     const ctx = getContext();
     if (ctx) {
       ctx.userId = user.id;
       ctx.accountId = user.accountId;
+      ctx.impersonatorId = impersonatorId;
     }
     next();
   };
 }
+
+/** El superadmin que impersona debe seguir siendo superadmin activo con 2FA. */
+async function assertValidImpersonator(adminId: number): Promise<void> {
+  const admin = await prisma.user.findUnique({
+    where: { id: adminId },
+    select: { isPlatformAdmin: true, isActive: true, deletedAt: true, totpEnabled: true },
+  });
+  if (!admin?.isPlatformAdmin || !admin.isActive || admin.deletedAt || !admin.totpEnabled) {
+    throw AppError.unauthorized('AUTH_SESSION_REVOKED');
+  }
+}
+
+/** Acciones sobre la identidad del usuario que nunca se hacen en una sesión de soporte. */
+export const forbidImpersonation: RequestHandler = (req, _res, next) => {
+  if (req.auth?.impersonatorId) throw AppError.forbidden('IMPERSONATION_FORBIDDEN');
+  next();
+};
 
 /** Acceso a req.auth en handlers que ya pasaron por authenticate(). */
 export function authOf(req: { auth?: AuthContext }): AuthContext {

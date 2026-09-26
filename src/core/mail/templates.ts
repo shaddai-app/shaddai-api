@@ -42,6 +42,48 @@ const passwordResetCopy = {
   },
 } as const;
 
+const accessCopy = {
+  es: {
+    subject: (church: string) => `Tu acceso a Shaddai — ${church}`,
+    hello: (name: string) => `Hola ${name}:`,
+    body: (church: string) => `Ya tenés acceso a Shaddai como administrador de ${church}.`,
+    password: (pass: string) => `Contraseña temporal: ${pass}`,
+    note: 'Es de un solo uso: al ingresar te vamos a pedir que crees tu propia contraseña.',
+    action: 'Ingresar',
+  },
+  en: {
+    subject: (church: string) => `Your Shaddai access — ${church}`,
+    hello: (name: string) => `Hi ${name},`,
+    body: (church: string) => `You now have access to Shaddai as administrator of ${church}.`,
+    password: (pass: string) => `Temporary password: ${pass}`,
+    note: "It's single-use: when you sign in you'll be asked to create your own password.",
+    action: 'Sign in',
+  },
+  pt: {
+    subject: (church: string) => `Seu acesso ao Shaddai — ${church}`,
+    hello: (name: string) => `Olá ${name},`,
+    body: (church: string) => `Você já tem acesso ao Shaddai como administrador de ${church}.`,
+    password: (pass: string) => `Senha temporária: ${pass}`,
+    note: 'É de uso único: ao entrar, pediremos que você crie sua própria senha.',
+    action: 'Entrar',
+  },
+} as const;
+
+/** Acceso inicial o reset por el superadmin: contraseña temporal con cambio obligatorio. */
+export function temporaryAccessMail(
+  locale: MailLocale,
+  data: { name: string; church: string; password: string; url: string },
+) {
+  const c = accessCopy[locale];
+  const paragraphs = [c.hello(data.name), c.body(data.church), c.password(data.password), c.note];
+  const subject = c.subject(data.church);
+  return {
+    subject,
+    text: [...paragraphs, '', `${c.action}: ${data.url}`].join('\n'),
+    html: layout(subject, paragraphs, { label: c.action, url: data.url }),
+  };
+}
+
 export function passwordResetMail(locale: MailLocale, name: string, url: string) {
   const c = passwordResetCopy[locale];
   const paragraphs = [c.hello(name), c.body, c.ignore];
