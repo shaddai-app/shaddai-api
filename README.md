@@ -89,6 +89,24 @@ scripts/                 setup SQL Server, login, backup, env
 
 ## Seguridad y multi-tenant
 
-Toda tabla de negocio lleva `accountId`; el aislamiento se aplica en la API (contexto de request + extensión de Prisma), nunca confiando en el front. SQL crudo (`$queryRaw`) está prohibido por lint fuera de `src/core/db`.
+Toda tabla de negocio lleva `accountId`; el aislamiento se aplica en la API, nunca confiando en el front.
+
+**Cómo se escribe un módulo de negocio:**
+
+```ts
+const t = tenantRouter(); // no se puede registrar una ruta sin permiso
+t.get('/campuses', 'account-user', handler); // cualquier usuario de la cuenta
+t.post('/campuses', 'estructura.gestionar', handler); // permiso requerido (o array = cualquiera)
+
+// dentro del handler: SIEMPRE tenantDb(), que filtra por la cuenta de la sesión
+await tenantDb().campus.findMany();
+await tenantDb().campus.create({ data: { ...data, accountId: currentAccountId() } });
+```
+
+- `tenantRouter()` encadena autenticación → usuario de cuenta → (escrituras) cuenta no en solo lectura → permiso.
+- `tenantDb()` agrega `accountId` a toda lectura/escritura, fuerza el `accountId` en los create, impide mover filas de cuenta y filtra tablas hijas (`UserRole`, `RolePermission`…) por su padre. Un registro de otra cuenta responde **404**, igual que uno inexistente.
+- Un modelo nuevo con `accountId` debe agregarse a `TENANT_MODELS` (`src/core/db/tenant.ts`); un test unitario falla si falta.
+- Lint: los módulos no pueden importar el cliente Prisma base y SQL crudo (`$queryRaw`) solo se permite en `src/core/db`.
+- Tests: `test/integration/permissions.test.ts` recorre **todas** las rutas registradas (401 sin token, 403 sin permiso); cada módulo suma sus tests de aislamiento A/B.
 
 Ver [CONTRIBUTING.md](CONTRIBUTING.md) para ramas y commits.

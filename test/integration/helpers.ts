@@ -4,6 +4,8 @@ import { hashPassword } from '../../src/core/auth/password.js';
 import { encryptSecret } from '../../src/core/auth/totp.js';
 import { prisma } from '../../src/core/db/prisma.js';
 import { memoryOutbox } from '../../src/core/mail/mailer.js';
+import type { PermissionKey } from '../../src/core/rbac/catalog.js';
+import { invalidateAllPermissions } from '../../src/core/rbac/permission-cache.js';
 
 export const app = createApp();
 export { prisma };
@@ -78,6 +80,43 @@ export async function createUser(
 export async function createAccountUser(options: Parameters<typeof createUser>[0] = {}) {
   const account = await createAccount();
   return createUser({ accountId: account.id, ...options });
+}
+
+/** Crea un rol con permisos {clave: scope} y lo asigna al usuario. */
+export async function grantRole(
+  user: { id: number; accountId: number | null },
+  permissions: Partial<Record<PermissionKey, 'all' | 'own'>>,
+  options: { systemKey?: string; isLocked?: boolean } = {},
+) {
+  const keys = Object.keys(permissions);
+  const perms = await prisma.permission.findMany({ where: { key: { in: keys } } });
+  if (perms.length !== keys.length) throw new Error(`Permisos inexistentes en ${keys.join(', ')}`);
+  const role = await prisma.role.create({
+    data: {
+      accountId: user.accountId!,
+      name: `rol-${unique()}`,
+      systemKey: options.systemKey ?? null,
+      isLocked: options.isLocked ?? false,
+      permissions: {
+        create: perms.map((p) => ({ permissionId: p.id, scope: permissions[p.key as PermissionKey]! })),
+      },
+    },
+  });
+  await prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
+  invalidateAllPermissions();
+  return role;
+}
+
+/** Cuenta + usuario con los permisos dados, ya logueado. */
+export async function actor(
+  permissions: Partial<Record<PermissionKey, 'all' | 'own'>> = {},
+  accountId?: number,
+) {
+  const account = accountId ?? (await createAccount()).id;
+  const user = await createUser({ accountId: account });
+  if (Object.keys(permissions).length) await grantRole(user, permissions);
+  const session = await loginAs(user);
+  return { user, accountId: account, token: session.accessToken, headers: bearer(session.accessToken) };
 }
 
 export const csrf = { 'X-Requested-With': 'shaddai' };
