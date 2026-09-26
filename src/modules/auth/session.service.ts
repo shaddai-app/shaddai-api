@@ -27,7 +27,7 @@ export const sessionUserSelect = {
   totpEnabled: true,
   locale: true,
   theme: true,
-  account: { select: { status: true, defaultLocale: true } },
+  account: { select: { status: true, defaultLocale: true, trialEndsAt: true } },
 } as const;
 
 export interface SessionUser {
@@ -39,7 +39,7 @@ export interface SessionUser {
   mustChangePassword: boolean;
   passwordChangedAt: Date | null;
   totpEnabled: boolean;
-  account: { status: string } | null;
+  account: { status: string; trialEndsAt?: Date | null } | null;
 }
 
 export function restrictionFor(
@@ -59,6 +59,13 @@ export function assertCanHoldSession(user: SessionUser): void {
   if (!user.isPlatformAdmin && user.account && ['suspended', 'closed'].includes(user.account.status)) {
     throw AppError.forbidden('ACCOUNT_SUSPENDED');
   }
+}
+
+/** Morosa o con la prueba vencida: puede entrar y consultar, pero no modificar datos. */
+export function isAccountReadOnly(account: SessionUser['account'], now = new Date()): boolean {
+  if (!account) return false;
+  if (account.status === 'past_due') return true;
+  return account.status === 'trial' && !!account.trialEndsAt && account.trialEndsAt <= now;
 }
 
 export function signAccessFor(user: SessionUser, familyId: string) {

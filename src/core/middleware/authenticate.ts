@@ -3,8 +3,10 @@ import { verifyAccessToken } from '../auth/jwt.js';
 import { getContext } from '../context.js';
 import { prisma } from '../db/prisma.js';
 import { AppError } from '../http/errors.js';
+import type { PermissionMap } from '../rbac/resolve.js';
 import {
   assertCanHoldSession,
+  isAccountReadOnly,
   isFamilyActive,
   passwordVersion,
   restrictionFor,
@@ -18,6 +20,9 @@ export interface AuthContext {
   isPlatformAdmin: boolean;
   sessionId: string;
   restriction: SessionRestriction;
+  accountReadOnly: boolean;
+  /** Se completa en requirePermission (cacheado). */
+  permissions?: PermissionMap;
 }
 
 declare module 'express-serve-static-core' {
@@ -63,6 +68,7 @@ export function authenticate(options: { allowRestricted?: boolean } = {}): Reque
       isPlatformAdmin: user.isPlatformAdmin,
       sessionId: claims.sid,
       restriction,
+      accountReadOnly: isAccountReadOnly(user.account),
     };
     const ctx = getContext();
     if (ctx) {

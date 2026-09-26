@@ -16,8 +16,8 @@ export class AppError extends Error {
   static unauthorized(code = 'UNAUTHORIZED') {
     return new AppError(401, code);
   }
-  static forbidden(code = 'FORBIDDEN') {
-    return new AppError(403, code);
+  static forbidden(code = 'FORBIDDEN', details?: unknown) {
+    return new AppError(403, code, undefined, details);
   }
   static notFound(code = 'NOT_FOUND') {
     return new AppError(404, code);

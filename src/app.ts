@@ -12,6 +12,7 @@ import { apiLimiter } from './core/middleware/rate-limit.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { meRouter } from './modules/me/me.routes.js';
+import { campusRouter } from './modules/structure/campus.routes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -61,6 +62,7 @@ export function createApp() {
   api.use(apiLimiter);
   api.use(authRouter);
   api.use(meRouter);
+  api.use(campusRouter);
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

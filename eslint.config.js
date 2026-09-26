@@ -25,6 +25,25 @@ export default tseslint.config(
     },
   },
   {
+    // Los módulos de negocio acceden a datos SOLO con tenantDb(). El cliente base (sin filtro de cuenta)
+    // queda para core/, auth, me (datos del propio usuario) y el panel de plataforma.
+    files: ['src/modules/**/*.ts'],
+    ignores: ['src/modules/auth/**', 'src/modules/me/**', 'src/modules/health/**', 'src/modules/platform/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/core/db/prisma.js'],
+              message: 'Usá tenantDb() de core/db/tenant.js: el cliente base no filtra por cuenta.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/core/db/**', 'prisma/seed/**', 'scripts/**', 'test/**'],
     rules: { 'no-restricted-syntax': 'off', 'no-console': 'off' },
   },
