@@ -1,6 +1,6 @@
-import request from 'supertest';
+﻿import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp } from '../src/app.js';
+import { createApp } from '../../src/app.js';
 
 describe('health', () => {
   const app = createApp();
@@ -12,7 +12,7 @@ describe('health', () => {
     expect(res.headers['x-request-id']).toBeTruthy();
   });
 
-  it('ruta inexistente devuelve 404 con código', async () => {
+  it('ruta inexistente devuelve 404 con cÃ³digo', async () => {
     const res = await request(app).get('/api/v1/no-existe');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('ROUTE_NOT_FOUND');
