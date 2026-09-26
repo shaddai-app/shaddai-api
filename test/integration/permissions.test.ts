@@ -11,6 +11,7 @@ import {
   createUser,
   grantRole,
   loginAs,
+  platformAdmin,
   prisma,
   resetDb,
 } from './helpers.js';
@@ -60,16 +61,34 @@ describe('toda ruta registrada está protegida', () => {
   });
 
   it('el superadmin no usa rutas de cuenta (403 ACCOUNT_USER_REQUIRED)', async () => {
-    const admin = await createUser({ isPlatformAdmin: true, totpSecret: 'JBSWY3DPEHPK3PXP' });
-    // Sesión completa sin pasar por el challenge: se emite directo para el test.
-    const { issueSession } = await import('../../src/modules/auth/session.service.js');
-    const full = await prisma.user.findUniqueOrThrow({ where: { id: admin.id }, include: { account: true } });
-    const session = await issueSession(full, false);
+    const admin = await platformAdmin();
     for (const route of routeRegistry.filter((r) => r.scope === 'tenant')) {
-      const res = await call(route.method, concrete(route.path), bearer(session.accessToken));
+      const res = await call(route.method, concrete(route.path), admin.headers);
       expect(res.status, `${route.method} ${route.path}`).toBe(403);
       expect(res.body.error.code).toBe('ACCOUNT_USER_REQUIRED');
     }
+  });
+
+  it('un usuario de cuenta, aun con todos los permisos, no entra a rutas de plataforma', async () => {
+    const account = await createAccount();
+    const user = await createUser({ accountId: account.id });
+    await grantRole(user, {}, { systemKey: 'admin', isLocked: true });
+    const { accessToken } = await loginAs(user);
+    const platformRoutes = routeRegistry.filter((r) => r.scope === 'platform');
+    expect(platformRoutes.length).toBeGreaterThan(0);
+    for (const route of platformRoutes) {
+      const res = await call(route.method, concrete(route.path), bearer(accessToken));
+      expect(res.status, `${route.method} ${route.path}`).toBe(403);
+      expect(res.body.error.code).toBe('PLATFORM_ADMIN_REQUIRED');
+    }
+  });
+
+  it('un superadmin sin 2FA enrolado no entra a rutas de plataforma', async () => {
+    const admin = await createUser({ isPlatformAdmin: true });
+    const { accessToken } = await loginAs(admin);
+    const res = await call('get', '/api/v1/platform/accounts', bearer(accessToken));
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('TOTP_ENROLLMENT_REQUIRED');
   });
 });
 

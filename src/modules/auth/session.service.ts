@@ -223,6 +223,7 @@ export async function listActiveSessions(userId: number) {
       lastUsedAt: true,
       expiresAt: true,
       rememberMe: true,
+      impersonatorId: true,
     },
   });
   const firstUse = await prisma.refreshToken.groupBy({

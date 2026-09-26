@@ -12,6 +12,7 @@ import { apiLimiter } from './core/middleware/rate-limit.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { meRouter } from './modules/me/me.routes.js';
+import { platformRoutes } from './modules/platform/platform.routes.js';
 import { campusRouter } from './modules/structure/campus.routes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,6 +22,10 @@ export function createApp() {
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  // Columnas BigInt (ej. AuditLog.id) no son serializables por JSON.stringify.
+  app.set('json replacer', (_key: string, value: unknown) =>
+    typeof value === 'bigint' ? value.toString() : value,
+  );
 
   app.use(
     pinoHttp({
@@ -63,6 +68,7 @@ export function createApp() {
   api.use(authRouter);
   api.use(meRouter);
   api.use(campusRouter);
+  api.use(platformRoutes);
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

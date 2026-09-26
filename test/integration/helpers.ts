@@ -6,6 +6,7 @@ import { prisma } from '../../src/core/db/prisma.js';
 import { memoryOutbox } from '../../src/core/mail/mailer.js';
 import type { PermissionKey } from '../../src/core/rbac/catalog.js';
 import { invalidateAllPermissions } from '../../src/core/rbac/permission-cache.js';
+import { issueSession } from '../../src/modules/auth/session.service.js';
 
 export const app = createApp();
 export { prisma };
@@ -105,6 +106,14 @@ export async function grantRole(
   await prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
   invalidateAllPermissions();
   return role;
+}
+
+/** Superadmin con 2FA enrolado y sesión completa (sin pasar por el challenge TOTP). */
+export async function platformAdmin() {
+  const admin = await createUser({ isPlatformAdmin: true, totpSecret: 'JBSWY3DPEHPK3PXP' });
+  const full = await prisma.user.findUniqueOrThrow({ where: { id: admin.id }, include: { account: true } });
+  const session = await issueSession(full, false);
+  return { user: admin, headers: bearer(session.accessToken) };
 }
 
 /** Cuenta + usuario con los permisos dados, ya logueado. */

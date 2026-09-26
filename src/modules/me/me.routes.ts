@@ -4,7 +4,7 @@ import { audit } from '../../core/audit/audit.js';
 import { prisma } from '../../core/db/prisma.js';
 import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
-import { authenticate, authOf } from '../../core/middleware/authenticate.js';
+import { authenticate, authOf, forbidImpersonation } from '../../core/middleware/authenticate.js';
 import { resolvePermissions } from '../../core/rbac/resolve.js';
 import { listActiveSessions, revokeFamily } from '../auth/session.service.js';
 
@@ -55,12 +55,17 @@ async function loadMe(userId: number) {
 
 // Permitido con sesión restringida: el front lo necesita para saber a qué pantalla mandar al usuario.
 meRouter.get('/me', authenticate({ allowRestricted: true }), async (req, res) => {
-  const { userId, restriction, isPlatformAdmin } = authOf(req);
+  const { userId, restriction, isPlatformAdmin, impersonatorId } = authOf(req);
   const me = await loadMe(userId);
-  res.json({ ...me, permissions: isPlatformAdmin ? {} : await resolvePermissions(userId), restriction });
+  res.json({
+    ...me,
+    permissions: isPlatformAdmin ? {} : await resolvePermissions(userId),
+    restriction,
+    impersonation: impersonatorId ? { impersonatorId } : null, // el front muestra el banner fijo
+  });
 });
 
-meRouter.patch('/me', authenticate(), async (req, res) => {
+meRouter.patch('/me', authenticate(), forbidImpersonation, async (req, res) => {
   const { userId } = authOf(req);
   const data = parse(UpdateMeSchema, req.body);
   await prisma.user.update({ where: { id: userId }, data });
@@ -79,11 +84,12 @@ meRouter.get('/me/sessions', authenticate(), async (req, res) => {
       createdAt: s.createdAt,
       lastUsedAt: s.lastUsedAt,
       expiresAt: s.expiresAt,
+      support: s.impersonatorId !== null, // sesión de soporte del superadmin
     })),
   });
 });
 
-meRouter.delete('/me/sessions/:id', authenticate(), async (req, res) => {
+meRouter.delete('/me/sessions/:id', authenticate(), forbidImpersonation, async (req, res) => {
   const { userId } = authOf(req);
   const familyId = z.uuid().parse(req.params.id);
   const owned = await prisma.refreshToken.findFirst({ where: { familyId, userId }, select: { id: true } });

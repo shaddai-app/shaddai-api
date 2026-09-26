@@ -9,6 +9,7 @@ export interface AccessClaims {
   sub: string; // userId
   sid: string; // familia de refresh (sesión)
   ver: number; // passwordChangedAt en segundos: cambiar la contraseña invalida los access emitidos
+  imp?: string; // id del superadmin que está impersonando (sesión de soporte)
 }
 
 export interface TwoFactorChallengeClaims {
@@ -39,8 +40,8 @@ async function verify<T>(token: string, typ: string): Promise<(T & JWTPayload) |
   }
 }
 
-export function signAccessToken(claims: AccessClaims) {
-  return sign({ ...claims }, 'access', `${env.JWT_ACCESS_TTL_MIN}m`);
+export function signAccessToken(claims: AccessClaims, ttlMinutes = env.JWT_ACCESS_TTL_MIN) {
+  return sign({ ...claims }, 'access', `${ttlMinutes}m`);
 }
 
 export function verifyAccessToken(token: string) {
