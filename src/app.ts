@@ -9,11 +9,14 @@ import { logger } from './core/logger.js';
 import { contextMiddleware } from './core/context.js';
 import { errorHandler, notFoundHandler } from './core/middleware/error-handler.js';
 import { apiLimiter } from './core/middleware/rate-limit.js';
+import { accountRouter } from './modules/account/account.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { meRouter } from './modules/me/me.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
+import { rolesRouter } from './modules/roles/roles.routes.js';
 import { campusRouter } from './modules/structure/campus.routes.js';
+import { usersRouter } from './modules/users/users.routes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -68,6 +71,9 @@ export function createApp() {
   api.use(authRouter);
   api.use(meRouter);
   api.use(campusRouter);
+  api.use(usersRouter);
+  api.use(rolesRouter);
+  api.use(accountRouter);
   api.use(platformRoutes);
   app.use('/api/v1', api);
 

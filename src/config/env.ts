@@ -38,6 +38,9 @@ const EnvSchema = z.object({
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOTP_ENC_KEY debe ser 32 bytes en base64'),
   RATE_LIMIT_ENABLED: bool('true'),
 
+  STORAGE_DRIVER: z.enum(['local']).default('local'), // Fase 8: 'r2'
+  STORAGE_LOCAL_PATH: z.string().default('./storage'),
+
   // console: loguea el mail (dev sin SMTP) · smtp: envío real · memory: tests
   MAIL_TRANSPORT: z.enum(['console', 'smtp', 'memory']).default('console'),
   SMTP_HOST: z.string().default('localhost'),

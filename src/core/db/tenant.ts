@@ -14,7 +14,7 @@ import { prisma } from './prisma.js';
  *
  * Un modelo nuevo con accountId DEBE agregarse acá (lo verifica test/unit/tenant-models.test.ts).
  */
-export const TENANT_MODELS = new Set(['User', 'Role', 'Campus', 'CatalogItem']);
+export const TENANT_MODELS = new Set(['User', 'Role', 'Campus', 'CatalogItem', 'FileObject']);
 
 /** relación -> { fk, modelo padre } */
 export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: string }>> = {

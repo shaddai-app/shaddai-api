@@ -1,3 +1,20 @@
+// Archivos subidos por la cuenta (logo, comprobantes, fotos). El binario vive en el StorageProvider.
+model FileObject {
+  id           Int       @id @default(autoincrement())
+  accountId    Int
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  storageKey   String    @unique @db.VarChar(300)
+  originalName String    @db.NVarChar(250)
+  mimeType     String    @db.VarChar(100)
+  sizeBytes    Int
+  purpose      String    @db.VarChar(30) // logo|receipt|photo|cell_report|inventory
+  uploadedById Int
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  @@index([accountId, purpose])
+}
+
 // Sin FKs a propósito: la auditoría sobrevive a borrados de usuarios/cuentas.
 model AuditLog {
   id             BigInt   @id @default(autoincrement())

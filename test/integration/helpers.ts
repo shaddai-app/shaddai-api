@@ -24,6 +24,7 @@ export async function resetDb() {
   await prisma.role.deleteMany();
   await prisma.user.deleteMany();
   await prisma.catalogItem.deleteMany();
+  await prisma.fileObject.deleteMany();
   await prisma.campus.deleteMany();
   await prisma.account.deleteMany();
   await prisma.plan.deleteMany();
@@ -114,6 +115,40 @@ export async function platformAdmin() {
   const full = await prisma.user.findUniqueOrThrow({ where: { id: admin.id }, include: { account: true } });
   const session = await issueSession(full, false);
   return { user: admin, headers: bearer(session.accessToken) };
+}
+
+/**
+ * Iglesia dada de alta como en producción (roles por defecto, catálogos, sede) con su dueño ya
+ * logueado y sin cambio de contraseña pendiente.
+ */
+export async function provisionChurch(overrides: { userLimit?: number; storageLimitMb?: number } = {}) {
+  const { createAccount: createChurch } = await import('../../src/modules/platform/platform.service.js');
+  const plan = await prisma.plan.create({
+    data: { code: `p-${unique()}`, name: 'Plan', userLimit: 10, storageLimitMb: 50, priceUsd: '0' },
+  });
+  const created = await createChurch({
+    name: `Iglesia ${unique()}`,
+    planId: plan.id,
+    status: 'active',
+    trialDays: 30,
+    defaultLocale: 'es',
+    timezone: 'America/Argentina/Buenos_Aires',
+    currency: 'ARS',
+    sendAccessEmail: false,
+    admin: { email: `owner-${unique()}@test.local`, firstName: 'Dueño', lastName: 'Iglesia' },
+    ...overrides,
+  });
+  const ownerId = created.admin.id;
+  await prisma.user.update({ where: { id: ownerId }, data: { mustChangePassword: false } });
+  const session = await loginAs({ email: created.admin.email, password: created.temporaryPassword });
+  const roles = await prisma.role.findMany({ where: { accountId: created.account.id } });
+  const roleId = (systemKey: string) => roles.find((r) => r.systemKey === systemKey)!.id;
+  return {
+    accountId: created.account.id as number,
+    ownerId,
+    headers: bearer(session.accessToken),
+    roleId,
+  };
 }
 
 /** Cuenta + usuario con los permisos dados, ya logueado. */

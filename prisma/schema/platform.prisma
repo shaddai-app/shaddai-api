@@ -46,6 +46,7 @@ model Account {
   roles        Role[]
   campuses     Campus[]
   catalogItems CatalogItem[]
+  files        FileObject[]
 
   @@index([status])
 }
