@@ -1,0 +1,31 @@
+model Campus {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name      String   @db.NVarChar(100)
+  isMain    Boolean  @default(false)
+  address   String?  @db.NVarChar(250)
+  lat       Decimal? @db.Decimal(9, 6)
+  lng       Decimal? @db.Decimal(9, 6)
+  isActive  Boolean  @default(true)
+
+  @@index([accountId])
+}
+
+// Listas simples configurables por cuenta. Si systemKey != null y name == null se muestra traducido.
+model CatalogItem {
+  id        Int     @id @default(autoincrement())
+  accountId Int
+  account   Account @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type      String  @db.VarChar(30) // person_status|milestone|position|inventory_category|event_type
+  systemKey String? @db.VarChar(40)
+  name      String? @db.NVarChar(100)
+  color     String? @db.VarChar(20)
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  @@index([accountId, type])
+  // Unicidad de (accountId, type, systemKey) no nulo: la valida el servicio. Un índice filtrado manual
+  // no es representable en Prisma y lo eliminaría la siguiente migración.
+  @@index([accountId, type, systemKey])
+}

@@ -1,0 +1,17 @@
+// Convenciones (SQL Server + Prisma 7):
+// - Sin enums ni Json (no soportados): VarChar + uniones TS/zod; NVarChar(Max) con JSON serializado.
+// - onDelete/onUpdate NoAction por defecto (SQL Server rechaza múltiples caminos de cascada).
+// - Toda tabla de negocio lleva accountId como primer campo de sus índices.
+// - Unique sobre columnas nullable: SQL Server admite un solo NULL y Prisma no expresa índices
+//   filtrados (los borra en la migración siguiente) -> validar en el servicio o modelar la relación
+//   del otro lado (ej. Person.userId en vez de User.personId).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "sqlserver"
+}

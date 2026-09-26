@@ -1,0 +1,19 @@
+// Sin FKs a propósito: la auditoría sobrevive a borrados de usuarios/cuentas.
+model AuditLog {
+  id             BigInt   @id @default(autoincrement())
+  accountId      Int?
+  userId         Int?
+  impersonatorId Int?
+  action         String   @db.VarChar(60)
+  entity         String?  @db.VarChar(40)
+  entityId       String?  @db.VarChar(40)
+  before         String?  @db.NVarChar(Max)
+  after          String?  @db.NVarChar(Max)
+  ip             String?  @db.VarChar(45)
+  userAgent      String?  @db.NVarChar(300)
+  requestId      String?  @db.VarChar(36)
+  createdAt      DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, entity, entityId])
+}

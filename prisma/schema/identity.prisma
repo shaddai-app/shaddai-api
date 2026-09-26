@@ -1,0 +1,111 @@
+model User {
+  id                 Int       @id @default(autoincrement())
+  accountId          Int? // null solo para el superadmin de plataforma
+  account            Account?  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  email              String    @unique @db.NVarChar(150)
+  passwordHash       String    @db.VarChar(200)
+  firstName          String    @db.NVarChar(80)
+  lastName           String    @db.NVarChar(80)
+  isPlatformAdmin    Boolean   @default(false)
+  isAccountOwner     Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  passwordChangedAt  DateTime?
+  failedLoginCount   Int       @default(0)
+  lockoutLevel       Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  locale             String?   @db.VarChar(5)
+  theme              String    @default("auto") @db.VarChar(5) // light|dark|auto
+  totpSecretEnc      String?   @db.VarChar(200)
+  totpEnabled        Boolean   @default(false)
+  notificationPrefs  String?   @db.NVarChar(Max)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  roles               UserRole[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([accountId, isActive])
+}
+
+model Permission {
+  id            Int              @id @default(autoincrement())
+  key           String           @unique @db.VarChar(60) // "finanzas.ver"
+  module        String           @db.VarChar(30)
+  action        String           @db.VarChar(30)
+  supportsScope Boolean          @default(false)
+  sortOrder     Int
+  roles         RolePermission[]
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  accountId   Int
+  account     Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name        String           @db.NVarChar(80)
+  description String?          @db.NVarChar(250)
+  systemKey   String?          @db.VarChar(40)
+  isLocked    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([accountId, name])
+  @@index([accountId])
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  scope        String     @default("all") @db.VarChar(3) // all|own
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RefreshToken {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId       String    @db.Char(36)
+  tokenHash      String    @unique @db.Char(64)
+  rememberMe     Boolean   @default(false)
+  impersonatorId Int?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  revokedReason  String?   @db.VarChar(30) // logout|rotated|reuse|password_change|admin
+  replacedById   Int?
+  ip             String?   @db.VarChar(45)
+  userAgent      String?   @db.NVarChar(300)
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}

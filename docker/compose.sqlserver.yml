@@ -1,0 +1,18 @@
+# Alternativa a SQL Server Express local: SQL Server 2025 (Developer) en Docker.
+# Uso: docker compose -f docker/compose.sqlserver.yml up -d
+# Luego en .env: DB_USER=sa, DB_PASSWORD=<MSSQL_SA_PASSWORD> (o crear shaddai_app con 01-setup-login.sql usando -U sa).
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: shaddai-sqlserver
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Definí MSSQL_SA_PASSWORD}
+    ports:
+      - '1433:1433'
+    volumes:
+      - shaddai-mssql:/var/opt/mssql
+
+volumes:
+  shaddai-mssql:

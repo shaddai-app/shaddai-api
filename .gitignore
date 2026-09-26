@@ -1,0 +1,33 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+coverage/
+
+# Cliente Prisma generado
+src/generated/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Archivos subidos en desarrollo
+storage/
+
+# Backups locales
+backups/
+*.bak
+
+# Logs
+*.log
+npm-debug.log*
+
+# SO / editores
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/

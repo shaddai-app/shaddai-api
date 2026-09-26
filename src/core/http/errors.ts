@@ -1,0 +1,28 @@
+/** Error de aplicación con código estable; el front traduce por `code`. */
+export class AppError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message?: string,
+    public readonly details?: unknown,
+  ) {
+    super(message ?? code);
+    this.name = 'AppError';
+  }
+
+  static badRequest(code = 'BAD_REQUEST', details?: unknown) {
+    return new AppError(400, code, undefined, details);
+  }
+  static unauthorized(code = 'UNAUTHORIZED') {
+    return new AppError(401, code);
+  }
+  static forbidden(code = 'FORBIDDEN') {
+    return new AppError(403, code);
+  }
+  static notFound(code = 'NOT_FOUND') {
+    return new AppError(404, code);
+  }
+  static conflict(code = 'CONFLICT', details?: unknown) {
+    return new AppError(409, code, undefined, details);
+  }
+}

@@ -1,0 +1,51 @@
+model Plan {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique @db.VarChar(30) // basic | standard | pro
+  name           String    @db.NVarChar(80)
+  userLimit      Int
+  storageLimitMb Int
+  priceUsd       Decimal   @db.Decimal(10, 2)
+  isActive       Boolean   @default(true)
+  accounts       Account[]
+}
+
+model Account {
+  id                 Int       @id @default(autoincrement())
+  name               String    @db.NVarChar(150)
+  slug               String    @unique @db.VarChar(60)
+  status             String    @default("trial") @db.VarChar(15) // trial|active|past_due|suspended|closed
+  planId             Int
+  plan               Plan      @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  userLimit          Int
+  storageLimitMb     Int
+  storageUsedBytes   BigInt    @default(0)
+  trialEndsAt        DateTime?
+  defaultLocale      String    @default("es") @db.VarChar(5)
+  timezone           String    @default("America/Argentina/Buenos_Aires") @db.VarChar(50)
+  currency           String    @default("ARS") @db.Char(3)
+  weekStartsOn       Int       @default(1) @db.TinyInt
+  primaryColor       String    @default("slate") @db.VarChar(20)
+  logoFileId         Int?
+  legalName          String?   @db.NVarChar(150)
+  taxId              String?   @db.VarChar(13)
+  taxCondition       String?   @db.VarChar(30)
+  ccliLicense        String?   @db.VarChar(20)
+  email              String?   @db.NVarChar(150)
+  phone              String?   @db.VarChar(30)
+  address            String?   @db.NVarChar(250)
+  cellMultiplyTarget Int       @default(12)
+  cellReportEditDays Int       @default(7)
+  structureLabels    String?   @db.NVarChar(Max)
+  notes              String?   @db.NVarChar(Max)
+  closedAt           DateTime?
+  purgeAfter         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  users        User[]
+  roles        Role[]
+  campuses     Campus[]
+  catalogItems CatalogItem[]
+
+  @@index([status])
+}
