@@ -65,3 +65,5 @@ jobs:
         run: npm run db:seed
       - name: Sin drift entre la base migrada y el schema
         run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
+      - name: Tests de integración (base Shaddai_test)
+        run: npm run test:int
