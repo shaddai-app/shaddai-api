@@ -1,0 +1,89 @@
+// Estructura de células: Red → Zona → Célula (los nombres "Red"/"Zona" los puede cambiar la cuenta).
+model Network {
+  id             Int      @id @default(autoincrement())
+  accountId      Int
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId       Int?
+  campus         Campus?  @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name           String   @db.NVarChar(100)
+  color          String?  @db.VarChar(20)
+  leaderPersonId Int?
+  leader         Person?  @relation("NetworkLeader", fields: [leaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  zones          Zone[]
+
+  @@index([accountId])
+  @@index([accountId, leaderPersonId])
+}
+
+model Zone {
+  id                 Int      @id @default(autoincrement())
+  accountId          Int
+  account            Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  networkId          Int
+  network            Network  @relation(fields: [networkId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name               String   @db.NVarChar(100)
+  supervisorPersonId Int?
+  supervisor         Person?  @relation("ZoneSupervisor", fields: [supervisorPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  cells              Cell[]
+
+  @@index([accountId, networkId])
+  @@index([accountId, supervisorPersonId])
+}
+
+model Cell {
+  id               Int          @id @default(autoincrement())
+  accountId        Int
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId         Int?
+  campus           Campus?      @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  zoneId           Int
+  zone             Zone         @relation(fields: [zoneId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentCellId     Int?
+  parentCell       Cell?        @relation("CellGenealogy", fields: [parentCellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children         Cell[]       @relation("CellGenealogy")
+  code             String?      @db.VarChar(20)
+  name             String       @db.NVarChar(100)
+  meetingDay       Int          @db.TinyInt // 0 = domingo … 6 = sábado
+  meetingTime      String       @db.Char(5) // HH:mm
+  address          String       @db.NVarChar(250) // exacta: solo con celulas.ver_direccion
+  city             String?      @db.NVarChar(100)
+  neighborhood     String?      @db.NVarChar(100) // visible sin permiso de dirección
+  lat              Decimal?     @db.Decimal(9, 6)
+  lng              Decimal?     @db.Decimal(9, 6)
+  leaderPersonId   Int
+  leader           Person       @relation("CellLeader", fields: [leaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coLeaderPersonId Int?
+  coLeader         Person?      @relation("CellCoLeader", fields: [coLeaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hostPersonId     Int?
+  host             Person?      @relation("CellHost", fields: [hostPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status           String       @default("active") @db.VarChar(10) // active|paused|closed|multiplied
+  startedAt        DateTime?    @db.Date
+  closedAt         DateTime?    @db.Date
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  members          CellMember[]
+
+  @@index([accountId, zoneId, status])
+  @@index([accountId, leaderPersonId])
+  @@index([accountId, coLeaderPersonId])
+  @@index([accountId, hostPersonId])
+  @@index([accountId, parentCellId])
+}
+
+model CellMember {
+  id        Int       @id @default(autoincrement())
+  accountId Int
+  cellId    Int
+  cell      Cell      @relation(fields: [cellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId  Int
+  person    Person    @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  joinedAt  DateTime  @db.Date
+  leftAt    DateTime? @db.Date
+
+  @@index([accountId, cellId, leftAt])
+  @@index([accountId, personId, leftAt])
+}

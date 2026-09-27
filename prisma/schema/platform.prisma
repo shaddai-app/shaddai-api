@@ -52,6 +52,9 @@ model Account {
   people       Person[]
   newcomers    NewcomerSubmission[]
   importJobs   ImportJob[]
+  networks     Network[]
+  zones        Zone[]
+  cells        Cell[]
 
   @@index([status])
 }

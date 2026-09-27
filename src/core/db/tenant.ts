@@ -28,6 +28,10 @@ export const TENANT_MODELS = new Set([
   'PersonPosition',
   'NewcomerSubmission',
   'ImportJob',
+  'Network',
+  'Zone',
+  'Cell',
+  'CellMember',
 ]);
 
 /** relación -> { fk, modelo padre } */

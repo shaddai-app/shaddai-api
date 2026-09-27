@@ -96,7 +96,7 @@ describe('importación de personas', () => {
     data[30]![4] = '01/01/2999'; // futura → error
     data[40]![3] = 'no-es-email'; // email inválido → error
     data[50]![5] = 'Desconocido'; // estado desconocido → advertencia (estado por defecto)
-    data[60]![2] = data[61]![2]; // teléfono repetido en el archivo → advertencia
+    data[60]![2] = data[61]![2]!; // teléfono repetido en el archivo → advertencia
     // Fila 4 (índice 3) tiene el teléfono de la persona existente → duplicado.
 
     const preview = await upload(church.headers, await xlsx([header, ...data]), 'miembros.xlsx');

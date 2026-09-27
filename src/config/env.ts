@@ -53,6 +53,11 @@ const EnvSchema = z
     // Cloudflare Turnstile para formularios públicos. Sin secreto (solo fuera de producción) no se verifica.
     TURNSTILE_SECRET: z.string().optional(),
     TURNSTILE_SITE_KEY: z.string().optional(),
+
+    // Geocodificación de direcciones (células, personas). none = solo carga manual del punto en el mapa.
+    GEOCODING_PROVIDER: z.enum(['none', 'locationiq', 'geoapify']).default('none'),
+    GEOCODING_API_KEY: z.string().optional(),
+    GEOCODING_COUNTRY: z.string().length(2).default('ar'),
   })
   .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
     message: 'TURNSTILE_SECRET es obligatorio en producción',

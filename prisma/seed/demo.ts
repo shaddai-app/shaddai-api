@@ -25,6 +25,7 @@ export async function seedDemo(prisma: PrismaClient) {
   if (existing) {
     console.log('✔ Iglesia demo ya existe');
     await seedDemoPeople(prisma, existing.id);
+    await seedDemoCells(prisma, existing.id);
     return;
   }
 
@@ -64,6 +65,128 @@ export async function seedDemo(prisma: PrismaClient) {
   }
   console.log(`✔ Iglesia demo creada con ${DEMO_USERS.length} usuarios (contraseña: SEED_DEMO_PASSWORD)`);
   await seedDemoPeople(prisma, account.id);
+  await seedDemoCells(prisma, account.id);
+}
+
+/**
+ * Redes, zonas y células de ejemplo (Quilmes/Lanús) con líderes e integrantes tomados de las
+ * personas demo. El usuario demo-lider queda vinculado al líder de la primera célula.
+ * Idempotente: solo corre si la iglesia demo no tiene redes.
+ */
+async function seedDemoCells(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.network.count({ where: { accountId } })) > 0) return;
+  const adults = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, householdRole: { in: ['head', 'spouse'] } },
+    orderBy: { id: 'asc' },
+  });
+  const others = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, householdRole: 'child' },
+    orderBy: { id: 'asc' },
+  });
+  if (adults.length < 8) return;
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const [youth, families] = await Promise.all([
+    prisma.network.create({
+      data: { accountId, name: 'Red de Jóvenes', color: 'grape', leaderPersonId: adults[0]!.id },
+    }),
+    prisma.network.create({
+      data: { accountId, name: 'Red de Familias', color: 'teal', leaderPersonId: adults[1]!.id },
+    }),
+  ]);
+  const zones = await Promise.all([
+    prisma.zone.create({
+      data: { accountId, networkId: youth.id, name: 'Zona Centro', supervisorPersonId: adults[2]!.id },
+    }),
+    prisma.zone.create({
+      data: { accountId, networkId: families.id, name: 'Zona Bernal', supervisorPersonId: adults[3]!.id },
+    }),
+    prisma.zone.create({ data: { accountId, networkId: families.id, name: 'Zona Lanús' } }),
+  ]);
+  const cells = [
+    {
+      name: 'Célula Esperanza',
+      zone: 0,
+      day: 5,
+      time: '20:00',
+      addr: 'Rivadavia 450',
+      hood: 'Quilmes Centro',
+      lat: -34.7242,
+      lng: -58.2526,
+    },
+    {
+      name: 'Célula Renuevo',
+      zone: 0,
+      day: 6,
+      time: '18:30',
+      addr: 'Alem 1200',
+      hood: 'Quilmes Oeste',
+      lat: -34.7318,
+      lng: -58.2771,
+    },
+    {
+      name: 'Célula Familia Unida',
+      zone: 1,
+      day: 3,
+      time: '20:30',
+      addr: 'Zapiola 300',
+      hood: 'Bernal',
+      lat: -34.7089,
+      lng: -58.2817,
+    },
+    {
+      name: 'Célula Casa de Paz',
+      zone: 1,
+      day: 4,
+      time: '20:00',
+      addr: 'Belgrano 750',
+      hood: 'Bernal Oeste',
+      lat: -34.7152,
+      lng: -58.2994,
+    },
+    {
+      name: 'Célula Lanús Este',
+      zone: 2,
+      day: 2,
+      time: '19:30',
+      addr: 'Hipólito Yrigoyen 3900',
+      hood: 'Lanús Este',
+      lat: -34.7013,
+      lng: -58.3915,
+    },
+  ];
+  const pool = [...adults.slice(8), ...others];
+  let leaderIndex = 4;
+  for (const [i, c] of cells.entries()) {
+    const leader = adults[leaderIndex++ % adults.length]!;
+    const cell = await prisma.cell.create({
+      data: {
+        accountId,
+        zoneId: zones[c.zone]!.id,
+        name: c.name,
+        code: `C${String(i + 1).padStart(2, '0')}`,
+        meetingDay: c.day,
+        meetingTime: c.time,
+        address: c.addr,
+        neighborhood: c.hood,
+        city: c.hood.startsWith('Lanús') ? 'Lanús' : 'Quilmes',
+        lat: c.lat,
+        lng: c.lng,
+        leaderPersonId: leader.id,
+        startedAt: new Date(Date.UTC(2022 + (i % 3), i * 2, 1)),
+      },
+    });
+    const members = [leader, ...pool.splice(0, 4)];
+    await prisma.cellMember.createMany({
+      data: members.map((m) => ({ accountId, cellId: cell.id, personId: m.id, joinedAt: today })),
+    });
+    if (i === 0) {
+      await prisma.user.updateMany({
+        where: { accountId, email: 'demo-lider@shaddai.local' },
+        data: { personId: leader.id },
+      });
+    }
+  }
+  console.log(`✔ ${cells.length} células de ejemplo en ${zones.length} zonas`);
 }
 
 const FAMILIES = [
