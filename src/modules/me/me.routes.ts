@@ -33,6 +33,7 @@ async function loadMe(userId: number) {
       isPlatformAdmin: true,
       isAccountOwner: true,
       totpEnabled: true,
+      personId: true,
       account: {
         select: {
           id: true,

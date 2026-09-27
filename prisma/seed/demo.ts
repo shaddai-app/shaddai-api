@@ -21,8 +21,10 @@ export async function seedDemo(prisma: PrismaClient) {
   if (!password || password.length < 12)
     throw new Error('Definí SEED_DEMO_PASSWORD (12+ caracteres) en .env');
 
-  if (await prisma.account.findUnique({ where: { slug: DEMO_SLUG } })) {
+  const existing = await prisma.account.findUnique({ where: { slug: DEMO_SLUG } });
+  if (existing) {
     console.log('✔ Iglesia demo ya existe');
+    await seedDemoPeople(prisma, existing.id);
     return;
   }
 
@@ -61,4 +63,142 @@ export async function seedDemo(prisma: PrismaClient) {
     });
   }
   console.log(`✔ Iglesia demo creada con ${DEMO_USERS.length} usuarios (contraseña: SEED_DEMO_PASSWORD)`);
+  await seedDemoPeople(prisma, account.id);
+}
+
+const FAMILIES = [
+  'González',
+  'Rodríguez',
+  'Fernández',
+  'López',
+  'Martínez',
+  'Pérez',
+  'Gómez',
+  'Sánchez',
+  'Romero',
+  'Díaz',
+  'Álvarez',
+  'Benítez',
+];
+const ADULTS = [
+  ['Juan', 'M'],
+  ['María', 'F'],
+  ['Carlos', 'M'],
+  ['Laura', 'F'],
+  ['Diego', 'M'],
+  ['Silvia', 'F'],
+  ['Martín', 'M'],
+  ['Gabriela', 'F'],
+  ['Pablo', 'M'],
+  ['Andrea', 'F'],
+  ['Sergio', 'M'],
+  ['Natalia', 'F'],
+] as const;
+const KIDS = [
+  ['Tomás', 'M'],
+  ['Valentina', 'F'],
+  ['Mateo', 'M'],
+  ['Sofía', 'F'],
+  ['Benjamín', 'M'],
+  ['Martina', 'F'],
+] as const;
+
+/**
+ * Personas de ejemplo (familias con hijos, estados e hitos variados). Idempotente: solo corre si la
+ * iglesia demo todavía no tiene personas. Datos inventados y deterministas.
+ */
+async function seedDemoPeople(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.person.count({ where: { accountId } })) > 0) return;
+  const { searchTextOf } = await import('../../src/modules/people/people.service.js');
+  const catalog = async (type: string) =>
+    new Map(
+      (await prisma.catalogItem.findMany({ where: { accountId, type } })).map((c) => [c.systemKey!, c.id]),
+    );
+  const [statuses, milestones] = [await catalog('person_status'), await catalog('milestone')];
+  const campus = await prisma.campus.findFirstOrThrow({ where: { accountId, isMain: true } });
+  const tags = await Promise.all(
+    [
+      ['Jóvenes', 'grape'],
+      ['Voluntario', 'teal'],
+      ['Matrimonios', 'pink'],
+    ].map(([name, color]) => prisma.tag.create({ data: { accountId, name: name!, color } })),
+  );
+  const cycle = ['member', 'member', 'attendee', 'new', 'visitor', 'member', 'inactive'];
+  let n = 0;
+
+  for (const [i, lastName] of FAMILIES.entries()) {
+    const household = await prisma.household.create({
+      data: {
+        accountId,
+        name: `Familia ${lastName}`,
+        city: i % 2 ? 'Quilmes' : 'Lanús',
+        province: 'Buenos Aires',
+      },
+    });
+    const [first, second] = [ADULTS[i % ADULTS.length]!, ADULTS[(i + 5) % ADULTS.length]!];
+    const members = [
+      { name: first, role: 'head', year: 1970 + i },
+      ...(first[1] !== second[1] ? [{ name: second, role: 'spouse', year: 1972 + i }] : []),
+      ...(i % 3 !== 2 ? [{ name: KIDS[i % KIDS.length]!, role: 'child', year: 2008 + (i % 10) }] : []),
+    ];
+    for (const m of members) {
+      n++;
+      const statusKey = m.role === 'child' ? 'attendee' : cycle[n % cycle.length]!;
+      const person = await prisma.person.create({
+        data: {
+          accountId,
+          campusId: campus.id,
+          householdId: household.id,
+          householdRole: m.role,
+          firstName: m.name[0],
+          lastName,
+          gender: m.name[1],
+          birthDate: new Date(Date.UTC(m.year, (n * 7) % 12, 1 + (n % 27))),
+          phone: m.role === 'child' ? null : `+54911${String(40000000 + n * 7919).slice(0, 8)}`,
+          email:
+            m.role === 'child'
+              ? null
+              : `${m.name[0].toLowerCase()}.${n}@ejemplo.com`.normalize('NFD').replace(/\p{Diacritic}/gu, ''),
+          city: household.city,
+          province: household.province,
+          statusId: statuses.get(statusKey)!,
+          source: 'manual',
+          firstVisitAt: new Date(Date.UTC(2015 + (n % 10), n % 12, 1)),
+          searchText: searchTextOf({ firstName: m.name[0], lastName }),
+        },
+      });
+      await prisma.personStatusHistory.create({
+        data: { accountId, personId: person.id, toStatusId: person.statusId },
+      });
+      if (statusKey === 'member') {
+        await prisma.personMilestone.createMany({
+          data: [
+            {
+              accountId,
+              personId: person.id,
+              milestoneTypeId: milestones.get('conversion')!,
+              date: new Date(Date.UTC(2010 + (n % 10), 2, 10)),
+            },
+            {
+              accountId,
+              personId: person.id,
+              milestoneTypeId: milestones.get('water_baptism')!,
+              date: new Date(Date.UTC(2011 + (n % 10), 10, 20)),
+            },
+          ],
+        });
+      }
+      const personTags = [
+        ...(m.role === 'child' || m.year > 2000 ? [tags[0]!] : []),
+        ...(n % 4 === 0 ? [tags[1]!] : []),
+        ...(m.role !== 'child' && members.length > 1 && m.role !== 'head' ? [tags[2]!] : []),
+      ];
+      if (personTags.length) {
+        await prisma.personTag.createMany({
+          data: personTags.map((t) => ({ personId: person.id, tagId: t.id })),
+        });
+      }
+    }
+  }
+  console.log(`✔ ${n} personas de ejemplo en la iglesia demo`);
 }

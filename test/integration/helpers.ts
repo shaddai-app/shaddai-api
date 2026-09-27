@@ -23,6 +23,13 @@ export async function resetDb() {
   await prisma.rolePermission.deleteMany();
   await prisma.role.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.personTag.deleteMany();
+  await prisma.personMilestone.deleteMany();
+  await prisma.personPosition.deleteMany();
+  await prisma.personStatusHistory.deleteMany();
+  await prisma.person.deleteMany();
+  await prisma.household.deleteMany();
+  await prisma.tag.deleteMany();
   await prisma.catalogItem.deleteMany();
   await prisma.fileObject.deleteMany();
   await prisma.campus.deleteMany();

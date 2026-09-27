@@ -30,6 +30,8 @@ export const UpdateUserSchema = z
     lastName: name,
     locale: z.enum(['es', 'en', 'pt']).nullable(),
     roleIds,
+    /** Ficha de persona del usuario (null = desvincular). */
+    personId: z.number().int().positive().nullable(),
   })
   .partial()
   .strict();
