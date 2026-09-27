@@ -2,6 +2,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { PERMISSIONS, type PermissionScope } from '../../core/rbac/catalog.js';
 import { ADMIN_ROLE_KEY } from '../../core/rbac/resolve.js';
 import { DEFAULT_ROLES } from '../../core/rbac/default-roles.js';
+import { DEFAULT_STEPS } from '../consolidation/consolidation.service.js';
 
 type Locale = 'es' | 'en' | 'pt';
 type Tx = Prisma.TransactionClient;
@@ -64,6 +65,15 @@ export async function applyAccountTemplate(
     data: Object.entries(DEFAULT_CATALOGS).flatMap(([type, keys]) =>
       keys.map((systemKey, i) => ({ accountId, type, systemKey, sortOrder: (i + 1) * 10 })),
     ),
+  });
+
+  await tx.consolidationStep.createMany({
+    data: DEFAULT_STEPS.map(([systemKey, dueDays], i) => ({
+      accountId,
+      systemKey,
+      dueDays,
+      sortOrder: (i + 1) * 10,
+    })),
   });
 
   return { adminRoleId };

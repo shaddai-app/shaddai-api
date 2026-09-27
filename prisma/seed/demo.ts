@@ -27,6 +27,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoPeople(prisma, existing.id);
     await seedDemoCells(prisma, existing.id);
     await seedDemoReports(prisma, existing.id);
+    await seedDemoConsolidation(prisma, existing.id);
     return;
   }
 
@@ -68,6 +69,61 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoPeople(prisma, account.id);
   await seedDemoCells(prisma, account.id);
   await seedDemoReports(prisma, account.id);
+  await seedDemoConsolidation(prisma, account.id);
+}
+
+/**
+ * Casos de consolidación de ejemplo para visitantes y nuevos: algunos asignados a demo-pastor,
+ * con pasos avanzados y uno vencido. Idempotente.
+ */
+async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.consolidationCase.count({ where: { accountId } })) > 0) return;
+  const { DEFAULT_STEPS } = await import('../../src/modules/consolidation/consolidation.service.js');
+  const { addDays, todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  if ((await prisma.consolidationStep.count({ where: { accountId } })) === 0) {
+    await prisma.consolidationStep.createMany({
+      data: DEFAULT_STEPS.map(([systemKey, dueDays], i) => ({
+        accountId,
+        systemKey,
+        dueDays,
+        sortOrder: (i + 1) * 10,
+      })),
+    });
+  }
+  const steps = await prisma.consolidationStep.findMany({
+    where: { accountId },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const pastor = await prisma.user.findFirst({ where: { accountId, email: 'demo-pastor@shaddai.local' } });
+  const people = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, status: { systemKey: { in: ['visitor', 'new'] } } },
+    orderBy: { id: 'asc' },
+    take: 8,
+  });
+  const today = todayIn(account.timezone);
+  for (const [i, p] of people.entries()) {
+    const opened = addDays(today, -(3 + i * 6)); // el más viejo queda con pasos vencidos
+    const doneCount = Math.min(i % 4, steps.length - 1);
+    await prisma.consolidationCase.create({
+      data: {
+        accountId,
+        personId: p.id,
+        consolidatorUserId: pastor && i % 2 === 0 ? pastor.id : null,
+        source: p.source === 'form' ? 'form' : 'manual',
+        openedAt: toDate(opened),
+        currentStepId: steps[doneCount]!.id,
+        steps: {
+          create: steps.map((s, k) => ({
+            stepId: s.id,
+            dueAt: toDate(addDays(opened, s.dueDays)),
+            completedAt: k < doneCount ? toDate(addDays(opened, 1 + k)) : null,
+          })),
+        },
+      },
+    });
+  }
+  console.log(`✔ ${people.length} casos de consolidación de ejemplo`);
 }
 
 /**

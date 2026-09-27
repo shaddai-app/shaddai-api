@@ -67,6 +67,8 @@ export function ownPeopleWhere(viewer: Viewer): Prisma.PersonWhereInput {
   return {
     OR: [
       { createdById: viewer.userId },
+      // Personas con un caso de consolidación asignado al usuario.
+      { consolidationCases: { some: { consolidatorUserId: viewer.userId } } },
       ...(viewer.personId
         ? [
             { id: viewer.personId },
@@ -81,6 +83,14 @@ export function ownPeopleWhere(viewer: Viewer): Prisma.PersonWhereInput {
 }
 
 /**
+ * Casos de consolidación "propios": los asignados al usuario y los de personas de su alcance
+ * (integrantes de sus células, las que cargó).
+ */
+export function ownCaseWhere(viewer: Viewer): Prisma.ConsolidationCaseWhereInput {
+  return { OR: [{ consolidatorUserId: viewer.userId }, { person: ownPeopleWhere(viewer) }] };
+}
+
+/**
  * Filtro de personas visibles para un permiso: {} con alcance total, el filtro "propio" con
  * alcance limitado, o null si no tiene el permiso.
  */
@@ -90,11 +100,13 @@ export function peopleWhereFor(viewer: Viewer, key: PermissionKey): Prisma.Perso
   return scope === 'all' ? {} : ownPeopleWhere(viewer);
 }
 
-/** ¿La persona (viva) entra en el alcance del permiso? */
+/**
+ * ¿La persona (viva y de esta cuenta) entra en el alcance del permiso? Con alcance total también se
+ * consulta: el id viene del cliente y puede ser de otra cuenta o no existir.
+ */
 export async function canOnPerson(viewer: Viewer, key: PermissionKey, personId: number): Promise<boolean> {
   const where = peopleWhereFor(viewer, key);
   if (!where) return false;
-  if (Object.keys(where).length === 0) return true;
   const count = await tenantDb().person.count({ where: { AND: [{ id: personId, deletedAt: null }, where] } });
   return count > 0;
 }

@@ -18,6 +18,7 @@ import { rolesRouter } from './modules/roles/roles.routes.js';
 import { cellsRouter } from './modules/cells/cells.routes.js';
 import { cellReportsRouter } from './modules/cells/reports.routes.js';
 import { cellStructureRouter } from './modules/cells/structure.routes.js';
+import { consolidationRouter } from './modules/consolidation/consolidation.routes.js';
 import { householdsRouter } from './modules/people/households.routes.js';
 import { newcomersRouter } from './modules/people/newcomers.routes.js';
 import { peopleIoRouter } from './modules/people/people.io.routes.js';
@@ -91,6 +92,7 @@ export function createApp() {
   api.use(cellStructureRouter);
   api.use(cellReportsRouter); // antes de cellsRouter: /cells/genealogy no es /cells/:id
   api.use(cellsRouter);
+  api.use(consolidationRouter);
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);

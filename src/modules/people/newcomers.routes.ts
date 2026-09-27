@@ -6,6 +6,7 @@ import { AppError } from '../../core/http/errors.js';
 import { PaginationQuery, paged, toSkipTake } from '../../core/http/pagination.js';
 import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
+import { openCase } from '../consolidation/consolidation.service.js';
 import type { Locale } from './people.labels.js';
 import { IdParam } from './people.schemas.js';
 import { findDuplicates, insertPerson, isoDate, searchTextOf } from './people.service.js';
@@ -183,6 +184,9 @@ t.post('/newcomers/:id/accept', 'personas.nuevos_revisar', async (req, res) => {
       { source: 'form', selfReported: { consentAt: s.createdAt, consentVersion: s.consentVersion } },
     );
   }
+
+  // Toda persona que llega por el formulario entra a consolidación (sin consolidador asignado).
+  await openCase({ personId, source: 'form', createdById: viewer.userId });
 
   const reviewed = await tenantDb().newcomerSubmission.update({
     where: { id },

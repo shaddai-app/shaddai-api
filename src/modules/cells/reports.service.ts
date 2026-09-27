@@ -15,6 +15,7 @@ import {
 } from '../../core/time/local-date.js';
 import { fold, insertPerson, isoDate, normalizePhone } from '../people/people.service.js';
 import { ownZoneWhere, scopeOf, type Viewer } from '../people/people.scope.js';
+import { openCase } from '../consolidation/consolidation.service.js';
 import { cellWhereFor, idsInScope, inScope } from './cells.service.js';
 
 /** Días de tolerancia después de la reunión antes de marcar el reporte como faltante (rojo). */
@@ -208,13 +209,16 @@ async function buildAttendance(
       ? await db.person.findMany({ where: { phone, deletedAt: null }, select: { id: true, firstName: true } })
       : [];
     const existing = candidates.find((p) => fold(p.firstName) === fold(v.firstName));
-    const id =
-      existing?.id ??
-      (await insertPerson(
+    let id = existing?.id;
+    if (!id) {
+      id = await insertPerson(
         viewer,
         { firstName: v.firstName, lastName: v.lastName, phone: v.phone ?? null, allowDuplicate: true },
         { source: 'cell' },
-      ));
+      );
+      // Visita nueva de una célula → entra a consolidación (el caso aparece sin consolidador).
+      await openCase({ personId: id, source: 'cell', createdById: viewer.userId });
+    }
     if (!members.has(id) && !visitorIds.includes(id)) visitorIds.push(id);
   }
   return [
