@@ -100,11 +100,13 @@ export function peopleWhereFor(viewer: Viewer, key: PermissionKey): Prisma.Perso
   return scope === 'all' ? {} : ownPeopleWhere(viewer);
 }
 
-/** ¿La persona (viva) entra en el alcance del permiso? */
+/**
+ * ¿La persona (viva y de esta cuenta) entra en el alcance del permiso? Con alcance total también se
+ * consulta: el id viene del cliente y puede ser de otra cuenta o no existir.
+ */
 export async function canOnPerson(viewer: Viewer, key: PermissionKey, personId: number): Promise<boolean> {
   const where = peopleWhereFor(viewer, key);
   if (!where) return false;
-  if (Object.keys(where).length === 0) return true;
   const count = await tenantDb().person.count({ where: { AND: [{ id: personId, deletedAt: null }, where] } });
   return count > 0;
 }

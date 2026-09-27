@@ -358,3 +358,123 @@ describe('entradas automáticas', () => {
     });
   });
 });
+
+describe('aislamiento entre iglesias', () => {
+  it('casos, pasos, consolidadores y seguimientos de otra cuenta no se ven ni se tocan', async () => {
+    const a = await provisionChurch();
+    const b = await provisionChurch();
+    const consA = await consolidator(a.accountId);
+    const consB = await consolidator(b.accountId);
+    const personA = await person(a.headers, 'DeA');
+    const kase = await openCase(a.headers, personA, { consolidatorUserId: consA.user.id });
+    const stepA = kase.steps[0].step.id;
+    const followUp = await request(app)
+      .post(api(`/people/${personA}/follow-ups`))
+      .set(a.headers)
+      .send({ type: 'call', nextAction: 'Llamar', nextActionAt: today() });
+    const followUpId = followUp.body.items[0].id as number;
+    const stepsB = await request(app).get(api('/consolidation/steps')).set(b.headers);
+    const stepB = stepsB.body.items[0].id as number;
+
+    // Lecturas desde B: nada de A.
+    const board = await request(app).get(api('/consolidation/board')).set(b.headers);
+    expect(board.body.summary).toMatchObject({ open: 0 });
+    expect((await request(app).get(api('/consolidation/cases')).set(b.headers)).body.items).toEqual([]);
+    expect(
+      (
+        await request(app)
+          .get(api(`/consolidation/cases/${kase.id}`))
+          .set(b.headers)
+      ).status,
+    ).toBe(404);
+    const consolidators = await request(app).get(api('/consolidation/consolidators')).set(b.headers);
+    expect(consolidators.body.items.map((u: { id: number }) => u.id)).not.toContain(consA.user.id);
+    expect(
+      (
+        await request(app)
+          .get(api(`/people/${personA}/follow-ups`))
+          .set(b.headers)
+      ).status,
+    ).toBe(404);
+    const tasksB = await request(app).get(api('/me/consolidation/tasks')).set(consB.headers);
+    expect(tasksB.body.actions).toEqual([]);
+    expect(tasksB.body.overdueCases).toEqual([]);
+
+    // Escrituras desde B sobre el caso de A: 404, sin cambios.
+    const writes = [
+      request(app)
+        .patch(api(`/consolidation/cases/${kase.id}/assign`))
+        .set(b.headers)
+        .send({
+          consolidatorUserId: consB.user.id,
+        }),
+      request(app)
+        .patch(api(`/consolidation/cases/${kase.id}`))
+        .set(b.headers)
+        .send({ status: 'dropped', closeReason: 'x' }),
+      request(app)
+        .post(api(`/consolidation/cases/${kase.id}/move`))
+        .set(b.headers)
+        .send({ stepId: stepA }),
+      request(app)
+        .post(api(`/consolidation/cases/${kase.id}/steps/${stepA}/complete`))
+        .set(b.headers)
+        .send({}),
+      request(app)
+        .post(api(`/consolidation/cases/${kase.id}/steps/${stepA}/undo`))
+        .set(b.headers),
+      request(app)
+        .delete(api(`/follow-ups/${followUpId}`))
+        .set(b.headers),
+      request(app)
+        .post(api(`/people/${personA}/follow-ups`))
+        .set(b.headers)
+        .send({ type: 'call' }),
+    ];
+    for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
+    expect(await prisma.consolidationCase.findUniqueOrThrow({ where: { id: kase.id } })).toMatchObject({
+      status: 'open',
+      consolidatorUserId: consA.user.id,
+    });
+    expect(
+      await prisma.consolidationCaseStep.count({ where: { caseId: kase.id, completedAt: { not: null } } }),
+    ).toBe(0);
+    expect(await prisma.followUp.count({ where: { personId: personA } })).toBe(1);
+
+    // FKs de otra cuenta en el cuerpo: persona, consolidador y paso.
+    const foreignPerson = await request(app)
+      .post(api('/consolidation/cases'))
+      .set(b.headers)
+      .send({ personId: personA });
+    expect(foreignPerson.body.error.code).toBe('PERSON_INVALID');
+    const foreignUser = await request(app)
+      .patch(api(`/consolidation/cases/${kase.id}/assign`))
+      .set(a.headers)
+      .send({ consolidatorUserId: consB.user.id });
+    expect(foreignUser.body.error.code).toBe('CONSOLIDATOR_INVALID');
+    const foreignStep = await request(app)
+      .post(api(`/consolidation/cases/${kase.id}/move`))
+      .set(a.headers)
+      .send({ stepId: stepB });
+    expect(foreignStep.body.error.code).toBe('CASE_STEP_NOT_FOUND');
+
+    // Pasos de A desde B.
+    const rename = await request(app)
+      .patch(api(`/consolidation/steps/${stepA}`))
+      .set(b.headers)
+      .send({ dueDays: 1 });
+    expect(rename.body.error.code).toBe('CATALOG_ITEM_NOT_FOUND');
+    const del = await request(app)
+      .delete(api(`/consolidation/steps/${stepA}`))
+      .set(b.headers);
+    expect(del.body.error.code).toBe('CATALOG_ITEM_NOT_FOUND');
+    const order = await request(app)
+      .put(api('/consolidation/steps/order'))
+      .set(b.headers)
+      .send({ ids: [stepA, stepB] });
+    expect(order.body.error.code).toBe('CATALOG_ITEM_INVALID');
+    expect(await prisma.consolidationStep.findUniqueOrThrow({ where: { id: stepA } })).toMatchObject({
+      dueDays: 2,
+    });
+  });
+});

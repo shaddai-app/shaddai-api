@@ -337,6 +337,13 @@ describe('personas: alta, búsqueda y ficha', () => {
           .set(a.headers)
       ).status,
     ).toBe(404);
+    // Con alcance total también se valida que la persona sea de la cuenta.
+    const foreignMember = await request(app)
+      .post(api('/households'))
+      .set(a.headers)
+      .send({ name: 'Familia A', members: [{ personId: personB.id, role: 'head' }] });
+    expect(foreignMember.body.error.code).toBe('PERSON_INVALID');
+    expect(await prisma.household.count({ where: { accountId: a.accountId } })).toBe(0);
   });
 });
 
