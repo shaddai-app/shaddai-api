@@ -25,5 +25,11 @@ export const passwordResetLimiter = limiter(15 * 60_000, 5);
 /** Refresh: holgado (varias pestañas), pero corta abusos. */
 export const refreshLimiter = limiter(60_000, 60);
 
+/** Formularios públicos (Soy nuevo): 5 envíos cada 10 minutos por IP. */
+export const publicFormLimiter = limiter(10 * 60_000, 5);
+
+/** Lecturas públicas (configuración del formulario, logo). */
+export const publicReadLimiter = limiter(60_000, 60);
+
 /** Resto de la API autenticada. */
 export const apiLimiter = limiter(60_000, 300);

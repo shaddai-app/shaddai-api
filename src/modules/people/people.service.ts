@@ -178,7 +178,10 @@ async function editablePerson(viewer: Viewer, id: number) {
 
 // ───────────── Listado y ficha ─────────────
 
-export async function listPeople(viewer: Viewer, query: z.infer<typeof ListPeopleQuery>) {
+export type PeopleFilters = Omit<z.infer<typeof ListPeopleQuery>, 'page' | 'pageSize'>;
+
+/** Filtro del listado (también lo usa la exportación): alcance del usuario + filtros + búsqueda. */
+export function peopleListWhere(viewer: Viewer, query: PeopleFilters): Prisma.PersonWhereInput {
   const scope = peopleWhereFor(viewer, 'personas.ver');
   if (!scope) throw AppError.forbidden('PERMISSION_DENIED');
 
@@ -200,12 +203,17 @@ export async function listPeople(viewer: Viewer, query: z.infer<typeof ListPeopl
       ],
     });
   }
-  const where: Prisma.PersonWhereInput = { AND: and };
-  const orderBy: Prisma.PersonOrderByWithRelationInput[] =
-    query.sort === 'recent'
-      ? [{ createdAt: 'desc' }, { id: 'desc' }]
-      : [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }];
+  return { AND: and };
+}
 
+export const peopleOrderBy = (sort: PeopleFilters['sort']): Prisma.PersonOrderByWithRelationInput[] =>
+  sort === 'recent'
+    ? [{ createdAt: 'desc' }, { id: 'desc' }]
+    : [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }];
+
+export async function listPeople(viewer: Viewer, query: z.infer<typeof ListPeopleQuery>) {
+  const where = peopleListWhere(viewer, query);
+  const orderBy = peopleOrderBy(query.sort);
   const db = tenantDb();
   const [rows, total] = await Promise.all([
     db.person.findMany({ where, select: listSelect, orderBy, ...toSkipTake(query) }),
@@ -402,10 +410,26 @@ function normalizeContact<T extends { phone?: string | null; documentNumber?: st
 export async function createPerson(
   viewer: Viewer,
   raw: CreateInput,
-  options: { source?: 'manual' | 'form' | 'import' | 'cell' } = {},
+  options: Parameters<typeof insertPerson>[2] = {},
+) {
+  return getPerson(viewer, await insertPerson(viewer, raw, options));
+}
+
+/** Alta sin devolver la ficha (quien acepta un formulario puede no tener personas.ver). */
+export async function insertPerson(
+  viewer: Viewer,
+  raw: CreateInput,
+  options: {
+    source?: 'manual' | 'form' | 'import' | 'cell';
+    /**
+     * Datos que cargó la propia persona (formulario "Soy nuevo"): se guardan aunque quien acepta no
+     * tenga ver_sensibles, con el consentimiento que dio ella.
+     */
+    selfReported?: { consentAt: Date; consentVersion: string };
+  } = {},
 ) {
   // Con alcance "propio" alcanza: la persona nueva queda cargada por él y entra en su alcance.
-  if (touchesSensitive(raw) && !scopeOf(viewer, 'personas.ver_sensibles')) {
+  if (!options.selfReported && touchesSensitive(raw) && !scopeOf(viewer, 'personas.ver_sensibles')) {
     throw AppError.forbidden('SENSITIVE_FIELDS_FORBIDDEN');
   }
   const { statusId: requestedStatus, tagIds, consent, allowDuplicate, ...fields } = normalizeContact(raw);
@@ -439,6 +463,7 @@ export async function createPerson(
         source: options.source ?? 'manual',
         createdById: viewer.userId,
         ...(consent ? { consentAt: new Date(), consentVersion: CONSENT_VERSION } : {}),
+        ...(options.selfReported ?? {}),
         // Escritura anidada: el chequeo de padres de personTag.createMany consulta fuera de la
         // transacción y no vería a la persona recién creada. Las etiquetas ya se validaron arriba.
         ...(tagIds?.length ? { tags: { create: [...new Set(tagIds)].map((tagId) => ({ tagId })) } } : {}),
@@ -457,7 +482,7 @@ export async function createPerson(
     entityId: person.id,
     after: { firstName: fields.firstName, lastName: fields.lastName, source: options.source ?? 'manual' },
   });
-  return getPerson(viewer, person.id);
+  return person.id;
 }
 
 export async function updatePerson(viewer: Viewer, id: number, raw: UpdateInput) {
@@ -791,6 +816,7 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
     await tx.personStatusHistory.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.personMilestone.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.personPosition.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    await tx.newcomerSubmission.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.personTag.deleteMany({ where: { personId: sourceId } });
     if (newTags.length) {
       await tx.personTag.createMany({ data: newTags.map((tagId) => ({ personId: intoId, tagId })) });

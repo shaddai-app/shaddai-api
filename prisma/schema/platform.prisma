@@ -50,6 +50,8 @@ model Account {
   tags         Tag[]
   households   Household[]
   people       Person[]
+  newcomers    NewcomerSubmission[]
+  importJobs   ImportJob[]
 
   @@index([status])
 }

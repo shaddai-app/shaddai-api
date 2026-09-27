@@ -28,7 +28,14 @@ export default tseslint.config(
     // Los módulos de negocio acceden a datos SOLO con tenantDb(). El cliente base (sin filtro de cuenta)
     // queda para core/, auth, me (datos del propio usuario) y el panel de plataforma.
     files: ['src/modules/**/*.ts'],
-    ignores: ['src/modules/auth/**', 'src/modules/me/**', 'src/modules/health/**', 'src/modules/platform/**'],
+    // public: busca la iglesia por slug antes de que haya cuenta en contexto; escribe con tenantClientFor.
+    ignores: [
+      'src/modules/auth/**',
+      'src/modules/me/**',
+      'src/modules/health/**',
+      'src/modules/platform/**',
+      'src/modules/public/**',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
