@@ -63,6 +63,7 @@ model Person {
   positions     PersonPosition[]
   tags          PersonTag[]
   users         User[]
+  newcomerForms NewcomerSubmission[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])
@@ -127,4 +128,50 @@ model PersonTag {
 
   @@id([personId, tagId])
   @@index([tagId])
+}
+
+// Formulario público "¡Soy nuevo!" (QR en el culto). Queda en bandeja hasta que alguien lo revisa.
+model NewcomerSubmission {
+  id             Int       @id @default(autoincrement())
+  accountId      Int
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  firstName      String    @db.NVarChar(80)
+  lastName       String    @db.NVarChar(80)
+  phone          String?   @db.VarChar(30)
+  email          String?   @db.NVarChar(150)
+  address        String?   @db.NVarChar(250)
+  city           String?   @db.NVarChar(100)
+  birthDate      DateTime? @db.Date
+  howHeard       String?   @db.NVarChar(200)
+  prayer         String?   @db.NVarChar(1000)
+  wantsVisit     Boolean   @default(false)
+  consent        Boolean
+  consentVersion String    @db.VarChar(10)
+  locale         String?   @db.VarChar(5)
+  status         String    @default("pending") @db.VarChar(10) // pending|accepted|rejected
+  personId       Int?
+  person         Person?   @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedById   Int?
+  reviewedAt     DateTime?
+  ip             String?   @db.VarChar(45)
+  createdAt      DateTime  @default(now())
+
+  @@index([accountId, status, createdAt])
+}
+
+// Importación de personas en dos pasos: vista previa (filas validadas) → confirmación.
+model ImportJob {
+  id          Int       @id @default(autoincrement())
+  accountId   Int
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdById Int
+  fileName    String    @db.NVarChar(250)
+  status      String    @default("preview") @db.VarChar(10) // preview|committed
+  rows        String    @db.NVarChar(Max) // JSON: filas normalizadas con errores/advertencias
+  summary     String    @db.NVarChar(Max) // JSON: totales
+  expiresAt   DateTime
+  committedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([accountId, createdById, createdAt])
 }

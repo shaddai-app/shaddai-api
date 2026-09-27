@@ -16,7 +16,11 @@ import { meRouter } from './modules/me/me.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
 import { rolesRouter } from './modules/roles/roles.routes.js';
 import { householdsRouter } from './modules/people/households.routes.js';
+import { newcomersRouter } from './modules/people/newcomers.routes.js';
+import { peopleIoRouter } from './modules/people/people.io.routes.js';
 import { peopleRouter } from './modules/people/people.routes.js';
+import { publicRouter } from './modules/public/public.routes.js';
+import { searchRouter } from './modules/search/search.routes.js';
 import { campusRouter } from './modules/structure/campus.routes.js';
 import { catalogsRouter } from './modules/structure/catalogs.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
@@ -70,13 +74,17 @@ export function createApp() {
     next();
   });
   api.use(healthRouter);
+  api.use(publicRouter); // sin sesión, con sus propios límites
   api.use(apiLimiter);
   api.use(authRouter);
   api.use(meRouter);
   api.use(campusRouter);
   api.use(catalogsRouter);
+  api.use(peopleIoRouter); // antes de peopleRouter: /people/export no es /people/:id
   api.use(peopleRouter);
   api.use(householdsRouter);
+  api.use(newcomersRouter);
+  api.use(searchRouter);
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);

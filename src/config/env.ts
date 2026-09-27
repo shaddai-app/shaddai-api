@@ -14,41 +14,50 @@ const csv = z.string().transform((v) =>
     .filter(Boolean),
 );
 
-const EnvSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  APP_URL: z.url(),
-  CORS_ORIGINS: csv,
+const EnvSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().positive().default(3000),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    APP_URL: z.url(),
+    CORS_ORIGINS: csv,
 
-  DB_HOST: z.string().min(1),
-  DB_PORT: z.coerce.number().int().positive().default(1433),
-  DB_NAME: z.string().min(1),
-  DB_USER: z.string().min(1),
-  DB_PASSWORD: z.string().min(1),
-  DB_ENCRYPT: bool(),
-  DB_TRUST_SERVER_CERTIFICATE: bool(),
+    DB_HOST: z.string().min(1),
+    DB_PORT: z.coerce.number().int().positive().default(1433),
+    DB_NAME: z.string().min(1),
+    DB_USER: z.string().min(1),
+    DB_PASSWORD: z.string().min(1),
+    DB_ENCRYPT: bool(),
+    DB_TRUST_SERVER_CERTIFICATE: bool(),
 
-  JWT_ACCESS_SECRET: z.string().min(64, 'JWT_ACCESS_SECRET debe tener al menos 64 caracteres'),
-  JWT_ACCESS_TTL_MIN: z.coerce.number().int().positive().default(15),
-  REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  REFRESH_REMEMBER_TTL_DAYS: z.coerce.number().int().positive().default(30),
-  TOTP_ENC_KEY: z
-    .string()
-    .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOTP_ENC_KEY debe ser 32 bytes en base64'),
-  RATE_LIMIT_ENABLED: bool('true'),
+    JWT_ACCESS_SECRET: z.string().min(64, 'JWT_ACCESS_SECRET debe tener al menos 64 caracteres'),
+    JWT_ACCESS_TTL_MIN: z.coerce.number().int().positive().default(15),
+    REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
+    REFRESH_REMEMBER_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    TOTP_ENC_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOTP_ENC_KEY debe ser 32 bytes en base64'),
+    RATE_LIMIT_ENABLED: bool('true'),
 
-  STORAGE_DRIVER: z.enum(['local']).default('local'), // Fase 8: 'r2'
-  STORAGE_LOCAL_PATH: z.string().default('./storage'),
+    STORAGE_DRIVER: z.enum(['local']).default('local'), // Fase 8: 'r2'
+    STORAGE_LOCAL_PATH: z.string().default('./storage'),
 
-  // console: loguea el mail (dev sin SMTP) · smtp: envío real · memory: tests
-  MAIL_TRANSPORT: z.enum(['console', 'smtp', 'memory']).default('console'),
-  SMTP_HOST: z.string().default('localhost'),
-  SMTP_PORT: z.coerce.number().int().positive().default(1025),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  MAIL_FROM: z.string().default('Shaddai <no-reply@shaddai.local>'),
-});
+    // console: loguea el mail (dev sin SMTP) · smtp: envío real · memory: tests
+    MAIL_TRANSPORT: z.enum(['console', 'smtp', 'memory']).default('console'),
+    SMTP_HOST: z.string().default('localhost'),
+    SMTP_PORT: z.coerce.number().int().positive().default(1025),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    MAIL_FROM: z.string().default('Shaddai <no-reply@shaddai.local>'),
+
+    // Cloudflare Turnstile para formularios públicos. Sin secreto (solo fuera de producción) no se verifica.
+    TURNSTILE_SECRET: z.string().optional(),
+    TURNSTILE_SITE_KEY: z.string().optional(),
+  })
+  .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
+    message: 'TURNSTILE_SECRET es obligatorio en producción',
+    path: ['TURNSTILE_SECRET'],
+  });
 
 export type Env = z.infer<typeof EnvSchema>;
 
