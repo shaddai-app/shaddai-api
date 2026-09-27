@@ -35,37 +35,40 @@ model Zone {
 }
 
 model Cell {
-  id               Int          @id @default(autoincrement())
+  id               Int                  @id @default(autoincrement())
   accountId        Int
-  account          Account      @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  account          Account              @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   campusId         Int?
-  campus           Campus?      @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campus           Campus?              @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   zoneId           Int
-  zone             Zone         @relation(fields: [zoneId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  zone             Zone                 @relation(fields: [zoneId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   parentCellId     Int?
-  parentCell       Cell?        @relation("CellGenealogy", fields: [parentCellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children         Cell[]       @relation("CellGenealogy")
-  code             String?      @db.VarChar(20)
-  name             String       @db.NVarChar(100)
-  meetingDay       Int          @db.TinyInt // 0 = domingo … 6 = sábado
-  meetingTime      String       @db.Char(5) // HH:mm
-  address          String       @db.NVarChar(250) // exacta: solo con celulas.ver_direccion
-  city             String?      @db.NVarChar(100)
-  neighborhood     String?      @db.NVarChar(100) // visible sin permiso de dirección
-  lat              Decimal?     @db.Decimal(9, 6)
-  lng              Decimal?     @db.Decimal(9, 6)
+  parentCell       Cell?                @relation("CellGenealogy", fields: [parentCellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children         Cell[]               @relation("CellGenealogy")
+  code             String?              @db.VarChar(20)
+  name             String               @db.NVarChar(100)
+  meetingDay       Int                  @db.TinyInt // 0 = domingo … 6 = sábado
+  meetingTime      String               @db.Char(5) // HH:mm
+  address          String               @db.NVarChar(250) // exacta: solo con celulas.ver_direccion
+  city             String?              @db.NVarChar(100)
+  neighborhood     String?              @db.NVarChar(100) // visible sin permiso de dirección
+  lat              Decimal?             @db.Decimal(9, 6)
+  lng              Decimal?             @db.Decimal(9, 6)
   leaderPersonId   Int
-  leader           Person       @relation("CellLeader", fields: [leaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leader           Person               @relation("CellLeader", fields: [leaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   coLeaderPersonId Int?
-  coLeader         Person?      @relation("CellCoLeader", fields: [coLeaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coLeader         Person?              @relation("CellCoLeader", fields: [coLeaderPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   hostPersonId     Int?
-  host             Person?      @relation("CellHost", fields: [hostPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status           String       @default("active") @db.VarChar(10) // active|paused|closed|multiplied
-  startedAt        DateTime?    @db.Date
-  closedAt         DateTime?    @db.Date
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  host             Person?              @relation("CellHost", fields: [hostPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status           String               @default("active") @db.VarChar(10) // active|paused|closed|multiplied
+  startedAt        DateTime?            @db.Date
+  closedAt         DateTime?            @db.Date
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
   members          CellMember[]
+  reports          CellReport[]
+  multipliedInto   CellMultiplication[] @relation("MultiplicationMother")
+  multipliedFrom   CellMultiplication[] @relation("MultiplicationChild")
 
   @@index([accountId, zoneId, status])
   @@index([accountId, leaderPersonId])
@@ -86,4 +89,57 @@ model CellMember {
 
   @@index([accountId, cellId, leftAt])
   @@index([accountId, personId, leftAt])
+}
+
+// Reporte semanal de la reunión de célula (lo carga el líder desde el celular).
+model CellReport {
+  id                Int                    @id @default(autoincrement())
+  accountId         Int
+  account           Account                @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cellId            Int
+  cell              Cell                   @relation(fields: [cellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  meetingDate       DateTime               @db.Date
+  held              Boolean
+  notHeldReason     String?                @db.NVarChar(300)
+  topic             String?                @db.NVarChar(200)
+  // Visitas sin ficha (se cuentan pero no se registran) + las registradas en attendance con isVisitor.
+  anonymousVisitors Int                    @default(0)
+  childrenCount     Int                    @default(0)
+  offeringAmount    Decimal?               @db.Decimal(18, 2) // Fase 4: genera un movimiento pendiente en finanzas
+  notes             String?                @db.NVarChar(1000)
+  submittedById     Int
+  submittedAt       DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  attendance        CellReportAttendance[]
+
+  @@unique([cellId, meetingDate])
+  @@index([accountId, meetingDate])
+}
+
+model CellReportAttendance {
+  reportId  Int
+  report    CellReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  personId  Int
+  person    Person     @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isVisitor Boolean    @default(false)
+
+  @@id([reportId, personId])
+  @@index([personId])
+}
+
+model CellMultiplication {
+  id           Int      @id @default(autoincrement())
+  accountId    Int
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  motherCellId Int
+  motherCell   Cell     @relation("MultiplicationMother", fields: [motherCellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childCellId  Int
+  childCell    Cell     @relation("MultiplicationChild", fields: [childCellId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  date         DateTime @db.Date
+  notes        String?  @db.NVarChar(500)
+  createdById  Int
+  createdAt    DateTime @default(now())
+
+  @@index([accountId, date])
+  @@index([accountId, motherCellId])
 }

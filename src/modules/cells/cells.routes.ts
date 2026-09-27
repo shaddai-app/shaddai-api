@@ -4,6 +4,7 @@ import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as cells from './cells.service.js';
+import { cellExtras } from './reports.service.js';
 
 const t = tenantRouter();
 export const cellsRouter = t.router;
@@ -46,7 +47,9 @@ t.get(
 
 t.get('/cells/:id', 'celulas.ver', async (req, res) => {
   const { id } = parse(IdParam, req.params);
-  res.json(await cells.getCell(await viewerOf(req), id));
+  const viewer = await viewerOf(req);
+  const cell = await cells.getCell(viewer, id);
+  res.json({ ...cell, ...(await cellExtras(viewer, id)) });
 });
 
 t.post('/cells', 'celulas.crear', async (req, res) => {

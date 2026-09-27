@@ -833,6 +833,14 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
       });
     }
     await tx.cellMember.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    // Asistencia a reportes: si las dos fichas figuran en el mismo reporte, queda una sola fila.
+    const targetReports = (
+      await tx.cellReportAttendance.findMany({ where: { personId: intoId }, select: { reportId: true } })
+    ).map((a) => a.reportId);
+    await tx.cellReportAttendance.deleteMany({
+      where: { personId: sourceId, reportId: { in: targetReports } },
+    });
+    await tx.cellReportAttendance.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.cell.updateMany({ where: { leaderPersonId: sourceId }, data: { leaderPersonId: intoId } });
     await tx.cell.updateMany({ where: { coLeaderPersonId: sourceId }, data: { coLeaderPersonId: intoId } });
     await tx.cell.updateMany({ where: { hostPersonId: sourceId }, data: { hostPersonId: intoId } });

@@ -26,6 +26,7 @@ export async function seedDemo(prisma: PrismaClient) {
     console.log('✔ Iglesia demo ya existe');
     await seedDemoPeople(prisma, existing.id);
     await seedDemoCells(prisma, existing.id);
+    await seedDemoReports(prisma, existing.id);
     return;
   }
 
@@ -66,6 +67,53 @@ export async function seedDemo(prisma: PrismaClient) {
   console.log(`✔ Iglesia demo creada con ${DEMO_USERS.length} usuarios (contraseña: SEED_DEMO_PASSWORD)`);
   await seedDemoPeople(prisma, account.id);
   await seedDemoCells(prisma, account.id);
+  await seedDemoReports(prisma, account.id);
+}
+
+/**
+ * Reportes de las últimas 4 semanas para las células demo (una célula sin reportar la semana
+ * pasada y una reunión suspendida), para que el semáforo tenga colores. Idempotente.
+ */
+async function seedDemoReports(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.cellReport.count({ where: { accountId } })) > 0) return;
+  const { addDays, meetingDateInWeek, todayIn, toDate, weekStart } =
+    await import('../../src/core/time/local-date.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const cells = await prisma.cell.findMany({
+    where: { accountId, status: 'active' },
+    include: { members: { where: { leftAt: null } } },
+    orderBy: { id: 'asc' },
+  });
+  const today = todayIn(account.timezone);
+  let created = 0;
+  for (let w = 1; w <= 4; w++) {
+    const start = weekStart(addDays(today, -7 * w), account.weekStartsOn);
+    for (const [i, cell] of cells.entries()) {
+      if (w === 1 && i === cells.length - 1) continue; // la última no reportó la semana pasada
+      const date = meetingDateInWeek(start, account.weekStartsOn, cell.meetingDay);
+      const held = !(w === 2 && i === 1); // una reunión suspendida
+      const present = held ? cell.members.filter((_, k) => (k + w) % 4 !== 0) : [];
+      await prisma.cellReport.create({
+        data: {
+          accountId,
+          cellId: cell.id,
+          meetingDate: toDate(date),
+          held,
+          notHeldReason: held ? null : 'Feriado largo',
+          topic: held ? ['La fe', 'La oración', 'El perdón', 'La familia'][w - 1] : null,
+          anonymousVisitors: held ? (i + w) % 3 : 0,
+          childrenCount: held ? (i * w) % 4 : 0,
+          offeringAmount: held ? 1500 + i * 250 + w * 100 : null,
+          submittedById: admin.id,
+          submittedAt: toDate(addDays(date, 1)),
+          attendance: { create: present.map((m) => ({ personId: m.personId })) },
+        },
+      });
+      created++;
+    }
+  }
+  console.log(`✔ ${created} reportes de célula de ejemplo`);
 }
 
 /**

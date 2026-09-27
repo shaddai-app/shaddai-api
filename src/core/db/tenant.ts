@@ -32,6 +32,8 @@ export const TENANT_MODELS = new Set([
   'Zone',
   'Cell',
   'CellMember',
+  'CellReport',
+  'CellMultiplication',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -41,6 +43,10 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   RefreshToken: { user: { fk: 'userId', parent: 'User' } },
   PasswordResetToken: { user: { fk: 'userId', parent: 'User' } },
   PersonTag: { person: { fk: 'personId', parent: 'Person' }, tag: { fk: 'tagId', parent: 'Tag' } },
+  CellReportAttendance: {
+    report: { fk: 'reportId', parent: 'CellReport' },
+    person: { fk: 'personId', parent: 'Person' },
+  },
 };
 
 /** Modelos con accountId que NO se filtran por tenant (a propósito). */
