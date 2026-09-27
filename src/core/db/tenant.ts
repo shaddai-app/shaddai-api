@@ -14,7 +14,19 @@ import { prisma } from './prisma.js';
  *
  * Un modelo nuevo con accountId DEBE agregarse acá (lo verifica test/unit/tenant-models.test.ts).
  */
-export const TENANT_MODELS = new Set(['User', 'Role', 'Campus', 'CatalogItem', 'FileObject']);
+export const TENANT_MODELS = new Set([
+  'User',
+  'Role',
+  'Campus',
+  'CatalogItem',
+  'Tag',
+  'FileObject',
+  'Household',
+  'Person',
+  'PersonStatusHistory',
+  'PersonMilestone',
+  'PersonPosition',
+]);
 
 /** relación -> { fk, modelo padre } */
 export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: string }>> = {
@@ -22,6 +34,7 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   RolePermission: { role: { fk: 'roleId', parent: 'Role' } },
   RefreshToken: { user: { fk: 'userId', parent: 'User' } },
   PasswordResetToken: { user: { fk: 'userId', parent: 'User' } },
+  PersonTag: { person: { fk: 'personId', parent: 'Person' }, tag: { fk: 'tagId', parent: 'Tag' } },
 };
 
 /** Modelos con accountId que NO se filtran por tenant (a propósito). */

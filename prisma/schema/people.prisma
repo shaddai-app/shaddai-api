@@ -1,0 +1,130 @@
+// Familias / hogares: agrupan personas que viven juntas (menores incluidos).
+model Household {
+  id         Int      @id @default(autoincrement())
+  accountId  Int
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name       String   @db.NVarChar(120)
+  address    String?  @db.NVarChar(250) // sensible
+  city       String?  @db.NVarChar(100)
+  province   String?  @db.NVarChar(100)
+  postalCode String?  @db.VarChar(10) // sensible
+  lat        Decimal? @db.Decimal(9, 6) // sensible
+  lng        Decimal? @db.Decimal(9, 6) // sensible
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  members    Person[]
+
+  @@index([accountId, name])
+}
+
+model Person {
+  id             Int         @id @default(autoincrement())
+  accountId      Int
+  account        Account     @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId       Int?
+  campus         Campus?     @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  householdId    Int?
+  household      Household?  @relation(fields: [householdId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  householdRole  String?     @db.VarChar(10) // head|spouse|child|other
+  firstName      String      @db.NVarChar(80)
+  lastName       String      @db.NVarChar(80)
+  preferredName  String?     @db.NVarChar(80)
+  gender         String?     @db.VarChar(1) // F|M
+  birthDate      DateTime?   @db.Date
+  documentNumber String?     @db.VarChar(20) // sensible
+  maritalStatus  String?     @db.VarChar(15) // sensible: single|married|widowed|divorced|separated
+  email          String?     @db.NVarChar(150)
+  phone          String?     @db.VarChar(30)
+  address        String?     @db.NVarChar(250) // sensible
+  city           String?     @db.NVarChar(100)
+  province       String?     @db.NVarChar(100)
+  lat            Decimal?    @db.Decimal(9, 6) // sensible
+  lng            Decimal?    @db.Decimal(9, 6) // sensible
+  photoFileId    Int?
+  statusId       Int
+  status         CatalogItem @relation("PersonStatus", fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  source         String      @default("manual") @db.VarChar(10) // manual|form|import|cell
+  firstVisitAt   DateTime?   @db.Date
+  consentAt      DateTime?
+  consentVersion String?     @db.VarChar(10)
+  pastoralNotes  String?     @db.NVarChar(Max) // sensible
+  notes          String?     @db.NVarChar(Max)
+  // Nombre + apodo + email en minúsculas y sin acentos: la collation CI_AS distingue acentos y
+  // "perez" no encontraría a "Pérez". La mantiene people.service (searchTextOf).
+  searchText     String      @default("") @db.NVarChar(450)
+  mergedIntoId   Int?
+  createdById    Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  statusHistory PersonStatusHistory[]
+  milestones    PersonMilestone[]
+  positions     PersonPosition[]
+  tags          PersonTag[]
+  users         User[]
+
+  @@index([accountId, deletedAt, lastName, firstName])
+  @@index([accountId, statusId])
+  @@index([accountId, phone])
+  @@index([accountId, email])
+  @@index([accountId, householdId])
+  @@index([accountId, createdById])
+}
+
+model PersonStatusHistory {
+  id           Int          @id @default(autoincrement())
+  accountId    Int
+  personId     Int
+  person       Person       @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromStatusId Int?
+  fromStatus   CatalogItem? @relation("StatusHistoryFrom", fields: [fromStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  toStatusId   Int
+  toStatus     CatalogItem  @relation("StatusHistoryTo", fields: [toStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  changedById  Int?
+  note         String?      @db.NVarChar(300)
+  changedAt    DateTime     @default(now())
+
+  @@index([accountId, personId])
+}
+
+model PersonMilestone {
+  id              Int         @id @default(autoincrement())
+  accountId       Int
+  personId        Int
+  person          Person      @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  milestoneTypeId Int
+  milestoneType   CatalogItem @relation("Milestone", fields: [milestoneTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  date            DateTime    @db.Date
+  notes           String?     @db.NVarChar(500)
+  createdAt       DateTime    @default(now())
+
+  @@index([accountId, personId])
+  @@index([accountId, milestoneTypeId, date])
+}
+
+// Cargos eclesiásticos (pastor, anciano, diácono…). No confundir con roles de sistema (RBAC).
+model PersonPosition {
+  id         Int         @id @default(autoincrement())
+  accountId  Int
+  personId   Int
+  person     Person      @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  positionId Int
+  position   CatalogItem @relation("Position", fields: [positionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  since      DateTime?   @db.Date
+  until      DateTime?   @db.Date
+  createdAt  DateTime    @default(now())
+
+  @@index([accountId, personId])
+  @@index([accountId, positionId])
+}
+
+model PersonTag {
+  personId Int
+  tagId    Int
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([personId, tagId])
+  @@index([tagId])
+}

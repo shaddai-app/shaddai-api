@@ -27,14 +27,19 @@ const userSelect = {
   lastLoginAt: true,
   createdAt: true,
   roles: { select: { role: { select: { id: true, name: true, systemKey: true, isLocked: true } } } },
+  person: { select: { id: true, firstName: true, lastName: true, deletedAt: true } },
 } as const;
 
 type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>;
 
 const present = (u: UserRow) => {
-  const { roles, lockedUntil, ...rest } = u;
+  const { roles, lockedUntil, person, ...rest } = u;
   return {
     ...rest,
+    person:
+      person && !person.deletedAt
+        ? { id: person.id, firstName: person.firstName, lastName: person.lastName }
+        : null,
     locked: lockedUntil !== null && lockedUntil > new Date(),
     lockedUntil,
     roles: roles.map((r) => r.role),
@@ -81,6 +86,16 @@ async function assertRolesOwned(roleIds: number[]) {
   const found = await tenantDb().role.count({ where: { id: { in: unique } } });
   if (found !== unique.length) throw AppError.badRequest('ROLE_INVALID');
   return unique;
+}
+
+/** Una ficha de persona se vincula a lo sumo con un usuario (unicidad validada acá, ver schema). */
+async function assertPersonLinkable(personId: number, userId: number) {
+  const db = tenantDb();
+  if (!(await db.person.count({ where: { id: personId, deletedAt: null } }))) {
+    throw AppError.badRequest('PERSON_INVALID');
+  }
+  const other = await db.user.count({ where: { personId, id: { not: userId }, deletedAt: null } });
+  if (other > 0) throw AppError.conflict('PERSON_ALREADY_LINKED');
 }
 
 async function adminRoleIds(): Promise<Set<number>> {
@@ -200,6 +215,8 @@ export async function updateUser(actorId: number, id: number, input: z.infer<typ
     ]);
     invalidateUserPermissions(id);
   }
+
+  if (input.personId) await assertPersonLinkable(input.personId, id);
 
   const { roleIds: _roles, ...profile } = input;
   if (Object.keys(profile).length) await db.user.update({ where: { id }, data: profile });

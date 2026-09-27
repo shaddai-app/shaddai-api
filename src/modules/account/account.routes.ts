@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { audit } from '../../core/audit/audit.js';
@@ -9,6 +10,7 @@ import { PaginationQuery } from '../../core/http/pagination.js';
 import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { hasPermission } from '../../core/middleware/authorize.js';
+import { canOnPerson, viewerOf } from '../people/people.scope.js';
 
 const t = tenantRouter();
 export const accountRouter = t.router;
@@ -195,14 +197,25 @@ t.get('/audit', 'auditoria.ver', async (req, res) => {
   res.json(await listAccountAudit(currentAccountId(), parse(AuditQuery, req.query)));
 });
 
-// Descarga de archivos. Por ahora solo el logo es visible para cualquier usuario de la cuenta;
-// cada módulo que agregue propósitos (comprobantes, fotos) define aquí su permiso.
-const FILE_PURPOSE_PERMISSION: Record<string, 'account-user' | undefined> = { logo: 'account-user' };
+// Descarga de archivos. Cada propósito decide quién lo puede ver; cada módulo que agregue uno
+// (comprobantes, reportes de célula) suma aquí su regla. Sin regla → 404.
+const FILE_ACCESS: Record<string, (req: Request, fileId: number) => Promise<boolean>> = {
+  logo: async () => true,
+  // Foto de persona: solo si esa persona está en el alcance de personas.ver del usuario.
+  photo: async (req, fileId) => {
+    const person = await tenantDb().person.findFirst({
+      where: { photoFileId: fileId, deletedAt: null },
+      select: { id: true },
+    });
+    return person !== null && canOnPerson(await viewerOf(req), 'personas.ver', person.id);
+  },
+};
 
 t.get('/files/:id', 'account-user', async (req, res) => {
   const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), req.params);
   const { file, data } = await readFileObject(id);
-  if (!FILE_PURPOSE_PERMISSION[file.purpose]) throw AppError.notFound('FILE_NOT_FOUND');
+  const allowed = FILE_ACCESS[file.purpose];
+  if (!allowed || !(await allowed(req, id))) throw AppError.notFound('FILE_NOT_FOUND');
   res.set({
     'Content-Type': file.mimeType,
     'Content-Length': String(data.length),

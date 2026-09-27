@@ -8,6 +8,7 @@ model Campus {
   lat       Decimal? @db.Decimal(9, 6)
   lng       Decimal? @db.Decimal(9, 6)
   isActive  Boolean  @default(true)
+  people    Person[]
 
   @@index([accountId])
 }
@@ -24,8 +25,26 @@ model CatalogItem {
   sortOrder Int     @default(0)
   isActive  Boolean @default(true)
 
+  peopleWithStatus  Person[]              @relation("PersonStatus")
+  statusHistoryFrom PersonStatusHistory[] @relation("StatusHistoryFrom")
+  statusHistoryTo   PersonStatusHistory[] @relation("StatusHistoryTo")
+  milestones        PersonMilestone[]     @relation("Milestone")
+  positions         PersonPosition[]      @relation("Position")
+
   @@index([accountId, type])
   // Unicidad de (accountId, type, systemKey) no nulo: la valida el servicio. Un índice filtrado manual
   // no es representable en Prisma y lo eliminaría la siguiente migración.
   @@index([accountId, type, systemKey])
+}
+
+// Etiquetas libres para personas ("Jóvenes", "Voluntario"…).
+model Tag {
+  id        Int         @id @default(autoincrement())
+  accountId Int
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name      String      @db.NVarChar(60)
+  color     String?     @db.VarChar(20)
+  people    PersonTag[]
+
+  @@unique([accountId, name])
 }
