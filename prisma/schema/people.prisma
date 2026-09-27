@@ -65,12 +65,13 @@ model Person {
   users         User[]
   newcomerForms NewcomerSubmission[]
 
-  leadsNetworks   Network[]    @relation("NetworkLeader")
-  supervisesZones Zone[]       @relation("ZoneSupervisor")
-  leadsCells      Cell[]       @relation("CellLeader")
-  coLeadsCells    Cell[]       @relation("CellCoLeader")
-  hostsCells      Cell[]       @relation("CellHost")
+  leadsNetworks   Network[]              @relation("NetworkLeader")
+  supervisesZones Zone[]                 @relation("ZoneSupervisor")
+  leadsCells      Cell[]                 @relation("CellLeader")
+  coLeadsCells    Cell[]                 @relation("CellCoLeader")
+  hostsCells      Cell[]                 @relation("CellHost")
   cellMemberships CellMember[]
+  cellAttendance  CellReportAttendance[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])

@@ -75,7 +75,7 @@ export function cellWhereFor(viewer: Viewer, key: PermissionKey): Prisma.CellWhe
 }
 
 /** Ids (de entre `ids`) que entran en el alcance del permiso. */
-async function idsInScope(viewer: Viewer, key: PermissionKey, ids: number[]): Promise<Set<number>> {
+export async function idsInScope(viewer: Viewer, key: PermissionKey, ids: number[]): Promise<Set<number>> {
   const where = cellWhereFor(viewer, key);
   if (!where || ids.length === 0) return new Set();
   if (Object.keys(where).length === 0) return new Set(ids);
@@ -86,7 +86,7 @@ async function idsInScope(viewer: Viewer, key: PermissionKey, ids: number[]): Pr
   return new Set(rows.map((r) => r.id));
 }
 
-async function inScope(viewer: Viewer, key: PermissionKey, id: number) {
+export async function inScope(viewer: Viewer, key: PermissionKey, id: number) {
   return (await idsInScope(viewer, key, [id])).has(id);
 }
 
@@ -291,7 +291,7 @@ export async function createCell(viewer: Viewer, input: z.infer<typeof CreateCel
   return getCell(viewer, cell.id);
 }
 
-const todayDate = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+export const todayDate = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
 
 export async function updateCell(viewer: Viewer, id: number, input: z.infer<typeof UpdateCellSchema>) {
   if (!(await inScope(viewer, 'celulas.ver', id))) throw AppError.notFound('CELL_NOT_FOUND');

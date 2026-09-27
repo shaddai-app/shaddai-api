@@ -23,6 +23,9 @@ export async function resetDb() {
   await prisma.rolePermission.deleteMany();
   await prisma.role.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.cellReportAttendance.deleteMany();
+  await prisma.cellReport.deleteMany();
+  await prisma.cellMultiplication.deleteMany();
   await prisma.cellMember.deleteMany();
   await prisma.cell.updateMany({ data: { parentCellId: null } });
   await prisma.cell.deleteMany();
