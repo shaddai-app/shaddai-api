@@ -546,6 +546,10 @@ export async function deletePerson(viewer: Viewer, id: number) {
     db.person.update({ where: { id }, data: { deletedAt: new Date() } }),
     db.user.updateMany({ where: { personId: id }, data: { personId: null } }),
     db.cellMember.updateMany({ where: { personId: id, leftAt: null }, data: { leftAt: today } }),
+    db.consolidationCase.updateMany({
+      where: { personId: id, status: 'open' },
+      data: { status: 'dropped', closeReason: 'person_deleted', closedAt: today },
+    }),
   ]);
   await audit({ action: 'people.delete', entity: 'Person', entityId: id });
 }
@@ -849,6 +853,19 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
       data: { supervisorPersonId: intoId },
     });
     await tx.network.updateMany({ where: { leaderPersonId: sourceId }, data: { leaderPersonId: intoId } });
+    // Consolidación: un solo caso abierto por persona; si ambas tenían, el de la origen se cierra.
+    if (await tx.consolidationCase.count({ where: { personId: intoId, status: 'open' } })) {
+      await tx.consolidationCase.updateMany({
+        where: { personId: sourceId, status: 'open' },
+        data: {
+          status: 'dropped',
+          closeReason: 'merged',
+          closedAt: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`),
+        },
+      });
+    }
+    await tx.consolidationCase.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    await tx.followUp.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.personTag.deleteMany({ where: { personId: sourceId } });
     if (newTags.length) {
       await tx.personTag.createMany({ data: newTags.map((tagId) => ({ personId: intoId, tagId })) });

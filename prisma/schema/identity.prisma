@@ -29,6 +29,7 @@ model User {
   deletedAt          DateTime?
 
   roles               UserRole[]
+  consolidationCases  ConsolidationCase[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
 

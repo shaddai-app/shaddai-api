@@ -34,6 +34,9 @@ export const TENANT_MODELS = new Set([
   'CellMember',
   'CellReport',
   'CellMultiplication',
+  'ConsolidationStep',
+  'ConsolidationCase',
+  'FollowUp',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -43,6 +46,10 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   RefreshToken: { user: { fk: 'userId', parent: 'User' } },
   PasswordResetToken: { user: { fk: 'userId', parent: 'User' } },
   PersonTag: { person: { fk: 'personId', parent: 'Person' }, tag: { fk: 'tagId', parent: 'Tag' } },
+  ConsolidationCaseStep: {
+    case: { fk: 'caseId', parent: 'ConsolidationCase' },
+    step: { fk: 'stepId', parent: 'ConsolidationStep' },
+  },
   CellReportAttendance: {
     report: { fk: 'reportId', parent: 'CellReport' },
     person: { fk: 'personId', parent: 'Person' },

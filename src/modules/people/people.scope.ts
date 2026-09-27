@@ -67,6 +67,8 @@ export function ownPeopleWhere(viewer: Viewer): Prisma.PersonWhereInput {
   return {
     OR: [
       { createdById: viewer.userId },
+      // Personas con un caso de consolidación asignado al usuario.
+      { consolidationCases: { some: { consolidatorUserId: viewer.userId } } },
       ...(viewer.personId
         ? [
             { id: viewer.personId },
@@ -78,6 +80,14 @@ export function ownPeopleWhere(viewer: Viewer): Prisma.PersonWhereInput {
         : []),
     ],
   };
+}
+
+/**
+ * Casos de consolidación "propios": los asignados al usuario y los de personas de su alcance
+ * (integrantes de sus células, las que cargó).
+ */
+export function ownCaseWhere(viewer: Viewer): Prisma.ConsolidationCaseWhereInput {
+  return { OR: [{ consolidatorUserId: viewer.userId }, { person: ownPeopleWhere(viewer) }] };
 }
 
 /**

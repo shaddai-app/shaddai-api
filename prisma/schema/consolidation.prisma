@@ -1,0 +1,75 @@
+// Consolidación: acompañamiento de personas nuevas por pasos, con un consolidador asignado.
+model ConsolidationStep {
+  id        Int                     @id @default(autoincrement())
+  accountId Int
+  account   Account                 @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  systemKey String?                 @db.VarChar(40) // si name es null se muestra traducido
+  name      String?                 @db.NVarChar(100)
+  sortOrder Int
+  dueDays   Int                     @default(7) // días desde la apertura del caso
+  isActive  Boolean                 @default(true)
+  caseSteps ConsolidationCaseStep[]
+  current   ConsolidationCase[]
+
+  @@index([accountId, sortOrder])
+}
+
+model ConsolidationCase {
+  id                 Int                     @id @default(autoincrement())
+  accountId          Int
+  account            Account                 @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId           Int
+  person             Person                  @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  consolidatorUserId Int?
+  consolidator       User?                   @relation(fields: [consolidatorUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentStepId      Int?
+  currentStep        ConsolidationStep?      @relation(fields: [currentStepId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status             String                  @default("open") @db.VarChar(10) // open|completed|dropped
+  source             String                  @default("manual") @db.VarChar(10) // manual|form|cell
+  closeReason        String?                 @db.NVarChar(300)
+  openedAt           DateTime                @db.Date
+  closedAt           DateTime?               @db.Date
+  createdById        Int?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  steps              ConsolidationCaseStep[]
+  followUps          FollowUp[]
+
+  @@index([accountId, status, consolidatorUserId])
+  @@index([accountId, personId])
+}
+
+model ConsolidationCaseStep {
+  id            Int               @id @default(autoincrement())
+  caseId        Int
+  case          ConsolidationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  stepId        Int
+  step          ConsolidationStep @relation(fields: [stepId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  dueAt         DateTime          @db.Date
+  completedAt   DateTime?         @db.Date
+  completedById Int?
+  notes         String?           @db.NVarChar(1000)
+
+  @@unique([caseId, stepId])
+  @@index([stepId])
+}
+
+model FollowUp {
+  id           Int                @id @default(autoincrement())
+  accountId    Int
+  account      Account            @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId     Int
+  person       Person             @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caseId       Int?
+  case         ConsolidationCase? @relation(fields: [caseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type         String             @db.VarChar(10) // call|visit|whatsapp|message|prayer|other
+  date         DateTime           @db.Date
+  notes        String?            @db.NVarChar(2000)
+  nextAction   String?            @db.NVarChar(200)
+  nextActionAt DateTime?          @db.Date
+  createdById  Int
+  createdAt    DateTime           @default(now())
+
+  @@index([accountId, personId])
+  @@index([accountId, createdById, nextActionAt])
+}

@@ -57,6 +57,9 @@ model Account {
   cells               Cell[]
   cellReports         CellReport[]
   cellMultiplications CellMultiplication[]
+  consolidationSteps  ConsolidationStep[]
+  consolidationCases  ConsolidationCase[]
+  followUps           FollowUp[]
 
   @@index([status])
 }
