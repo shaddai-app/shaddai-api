@@ -536,9 +536,16 @@ export async function updatePerson(viewer: Viewer, id: number, raw: UpdateInput)
 export async function deletePerson(viewer: Viewer, id: number) {
   await visiblePerson(viewer, id);
   const db = tenantDb();
+  // Quien lidera una célula abierta no se puede dar de baja: primero hay que reemplazarlo.
+  const leads = await db.cell.count({
+    where: { leaderPersonId: id, status: { in: ['active', 'paused'] } },
+  });
+  if (leads > 0) throw AppError.conflict('PERSON_LEADS_CELL');
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
   await db.$transaction([
     db.person.update({ where: { id }, data: { deletedAt: new Date() } }),
     db.user.updateMany({ where: { personId: id }, data: { personId: null } }),
+    db.cellMember.updateMany({ where: { personId: id, leftAt: null }, data: { leftAt: today } }),
   ]);
   await audit({ action: 'people.delete', entity: 'Person', entityId: id });
 }
@@ -817,6 +824,23 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
     await tx.personMilestone.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.personPosition.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.newcomerSubmission.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    // Células: participación y roles de liderazgo pasan a la ficha que queda. Si las dos
+    // participaban en células distintas, se conserva la del destino (una célula activa por persona).
+    if (await tx.cellMember.count({ where: { personId: intoId, leftAt: null } })) {
+      await tx.cellMember.updateMany({
+        where: { personId: sourceId, leftAt: null },
+        data: { leftAt: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) },
+      });
+    }
+    await tx.cellMember.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    await tx.cell.updateMany({ where: { leaderPersonId: sourceId }, data: { leaderPersonId: intoId } });
+    await tx.cell.updateMany({ where: { coLeaderPersonId: sourceId }, data: { coLeaderPersonId: intoId } });
+    await tx.cell.updateMany({ where: { hostPersonId: sourceId }, data: { hostPersonId: intoId } });
+    await tx.zone.updateMany({
+      where: { supervisorPersonId: sourceId },
+      data: { supervisorPersonId: intoId },
+    });
+    await tx.network.updateMany({ where: { leaderPersonId: sourceId }, data: { leaderPersonId: intoId } });
     await tx.personTag.deleteMany({ where: { personId: sourceId } });
     if (newTags.length) {
       await tx.personTag.createMany({ data: newTags.map((tagId) => ({ personId: intoId, tagId })) });

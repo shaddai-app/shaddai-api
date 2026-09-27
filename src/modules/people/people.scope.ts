@@ -33,13 +33,50 @@ export const scopeOf = (viewer: Viewer, key: PermissionKey): PermissionScope | u
   viewer.permissions[key];
 
 /**
- * Personas "propias" de un usuario con alcance limitado.
- * Fase 2: las que cargó él y su propia ficha. Fase 3 suma integrantes de sus células/zonas/redes
- * y los casos de consolidación que tiene asignados.
+ * Células "propias": donde es líder, colíder o anfitrión, las de las zonas que supervisa y las de
+ * las redes que lidera. Sin ficha de persona vinculada no tiene células propias.
+ */
+export function ownCellWhere(viewer: Viewer): Prisma.CellWhereInput {
+  const p = viewer.personId;
+  if (!p) return { id: -1 };
+  return {
+    OR: [
+      { leaderPersonId: p },
+      { coLeaderPersonId: p },
+      { hostPersonId: p },
+      { zone: { supervisorPersonId: p } },
+      { zone: { network: { leaderPersonId: p } } },
+    ],
+  };
+}
+
+/** Zonas propias: las que supervisa y las de sus redes (para crear células y filtrar). */
+export function ownZoneWhere(viewer: Viewer): Prisma.ZoneWhereInput {
+  const p = viewer.personId;
+  if (!p) return { id: -1 };
+  return { OR: [{ supervisorPersonId: p }, { network: { leaderPersonId: p } }] };
+}
+
+/**
+ * Personas "propias" de un usuario con alcance limitado: las que cargó, su propia ficha, los
+ * integrantes activos y líderes de sus células (ver ownCellWhere). Consolidación (casos asignados)
+ * se suma en su tramo.
  */
 export function ownPeopleWhere(viewer: Viewer): Prisma.PersonWhereInput {
+  const cells = ownCellWhere(viewer);
   return {
-    OR: [{ createdById: viewer.userId }, ...(viewer.personId ? [{ id: viewer.personId }] : [])],
+    OR: [
+      { createdById: viewer.userId },
+      ...(viewer.personId
+        ? [
+            { id: viewer.personId },
+            { cellMemberships: { some: { leftAt: null, cell: cells } } },
+            { leadsCells: { some: cells } },
+            { coLeadsCells: { some: cells } },
+            { hostsCells: { some: cells } },
+          ]
+        : []),
+    ],
   };
 }
 

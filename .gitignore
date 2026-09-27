@@ -14,7 +14,8 @@ src/generated/
 !.env.example
 
 # Archivos subidos en desarrollo
-storage/
+# Archivos subidos en desarrollo (STORAGE_LOCAL_PATH); solo la carpeta de la raíz.
+/storage/
 
 # Backups locales
 backups/
