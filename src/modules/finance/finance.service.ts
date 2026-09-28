@@ -19,7 +19,7 @@ export const MOVEMENT_KINDS = ['income', 'expense', 'transfer_in', 'transfer_out
 
 /** Categorías con las que arranca cada iglesia (renombrables; name null = traducido por systemKey). */
 export const DEFAULT_CATEGORIES: Record<(typeof CATEGORY_KINDS)[number], string[]> = {
-  income: ['tithe', 'offering', 'special_offering', 'donation', 'other_income'],
+  income: ['tithe', 'offering', 'special_offering', 'donation', 'event_fees', 'other_income'],
   expense: [
     'rent',
     'utilities',
@@ -62,6 +62,22 @@ export async function ensureDefaultCategories(db: Db = tenantDb()) {
   });
 }
 
+/**
+ * Categoría del sistema que la iglesia puede no tener (se agregó después de crear la cuenta, ej.
+ * inscripciones a eventos): si falta se crea al final de su tipo. Devuelve su id.
+ */
+export async function ensureSystemCategory(kind: 'income' | 'expense', systemKey: string) {
+  await ensureDefaultCategories();
+  const db = tenantDb();
+  const existing = await db.financeCategory.findFirst({ where: { kind, systemKey }, select: { id: true } });
+  if (existing) return existing.id;
+  const last = await db.financeCategory.aggregate({ where: { kind }, _max: { sortOrder: true } });
+  const created = await db.financeCategory.create({
+    data: { accountId: currentAccountId(), kind, systemKey, sortOrder: (last._max.sortOrder ?? 0) + 10 },
+    select: { id: true },
+  });
+  return created.id;
+}
 export const categorySelect = {
   id: true,
   kind: true,

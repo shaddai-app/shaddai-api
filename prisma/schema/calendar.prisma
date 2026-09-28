@@ -5,24 +5,31 @@
 // DateTime sin zona (se leen con getUTC*) y la API los devuelve como "YYYY-MM-DDTHH:mm".
 
 model CalendarEvent {
-  id          Int              @id @default(autoincrement())
-  accountId   Int
-  account     Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  campusId    Int?
-  campus      Campus?          @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  type        String           @db.VarChar(10) // service|meeting|special|other
-  title       String           @db.NVarChar(150)
-  description String?          @db.NVarChar(2000)
-  location    String?          @db.NVarChar(250)
-  startsAt    DateTime // hora local (primera fecha de la serie)
-  endsAt      DateTime // hora local; en los recurrentes define la duración de cada fecha
-  allDay      Boolean          @default(false)
-  rrule       String?          @db.VarChar(500) // solo la regla (FREQ=WEEKLY;BYDAY=SU;UNTIL=…), sin DTSTART
-  createdById Int
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  deletedAt   DateTime?
-  exceptions  EventException[]
+  id                  Int                 @id @default(autoincrement())
+  accountId           Int
+  account             Account             @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId            Int?
+  campus              Campus?             @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type                String              @db.VarChar(10) // service|meeting|special|other
+  title               String              @db.NVarChar(150)
+  description         String?             @db.NVarChar(2000)
+  location            String?             @db.NVarChar(250)
+  startsAt            DateTime // hora local (primera fecha de la serie)
+  endsAt              DateTime // hora local; en los recurrentes define la duración de cada fecha
+  allDay              Boolean             @default(false)
+  rrule               String?             @db.VarChar(500) // solo la regla (FREQ=WEEKLY;BYDAY=SU;UNTIL=…), sin DTSTART
+  // Inscripción (por fecha en los recurrentes). Precio en la moneda de la iglesia; el pago es manual.
+  registrationEnabled Boolean             @default(false)
+  capacity            Int?
+  waitlistEnabled     Boolean             @default(false)
+  price               Decimal?            @db.Decimal(18, 2)
+  isPublic            Boolean             @default(false) // inscripción desde el enlace público de la iglesia
+  createdById         Int
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
+  exceptions          EventException[]
+  registrations       EventRegistration[]
 
   @@index([accountId, startsAt])
   @@index([accountId, type])
@@ -41,4 +48,33 @@ model EventException {
 
   @@unique([eventId, originalStart])
   @@index([eventId, newStartsAt])
+}
+
+// Inscripción a una fecha de un evento. Con cupo lleno queda en lista de espera (si está
+// habilitada) y sube sola cuando alguien cancela o se amplía el cupo.
+model EventRegistration {
+  id                Int              @id @default(autoincrement())
+  accountId         Int
+  account           Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventId           Int
+  event             CalendarEvent    @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occurrenceStart   DateTime // hora local de la fecha (inicio original en los recurrentes)
+  personId          Int?
+  person            Person?          @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name              String           @db.NVarChar(150)
+  email             String?          @db.NVarChar(150)
+  phone             String?          @db.VarChar(30)
+  notes             String?          @db.NVarChar(500)
+  status            String           @default("confirmed") @db.VarChar(10) // confirmed|waitlist|cancelled
+  source            String           @default("staff") @db.VarChar(6) // staff|public
+  paidAmount        Decimal?         @db.Decimal(18, 2)
+  paymentMovementId Int?
+  paymentMovement   FinanceMovement? @relation(fields: [paymentMovementId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdById       Int?
+  createdAt         DateTime         @default(now())
+  cancelledAt       DateTime?
+
+  @@index([accountId, eventId, occurrenceStart, status])
+  @@index([accountId, personId])
+  @@index([paymentMovementId])
 }

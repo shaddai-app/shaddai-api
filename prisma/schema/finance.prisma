@@ -72,6 +72,7 @@ model FinanceMovement {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   attachments      MovementAttachment[]
+  eventPayments    EventRegistration[]
 
   @@index([accountId, date])
   @@index([accountId, financeAccountId, date])

@@ -43,6 +43,7 @@ export const TENANT_MODELS = new Set([
   'OfferingCount',
   'FinancePeriod',
   'CalendarEvent',
+  'EventRegistration',
 ]);
 
 /** relación -> { fk, modelo padre } */

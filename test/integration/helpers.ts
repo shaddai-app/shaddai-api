@@ -17,6 +17,7 @@ export const NEW_STRONG_PASSWORD = 'montaña-violeta-tranvía-azul';
 /** Borra datos de negocio respetando FKs. Los permisos (catálogo global) se conservan. */
 export async function resetDb() {
   await prisma.auditLog.deleteMany();
+  await prisma.eventRegistration.deleteMany(); // antes que los movimientos (pagos)
   await prisma.movementAttachment.deleteMany();
   await prisma.financeMovement.deleteMany();
   await prisma.offeringCountLine.deleteMany();

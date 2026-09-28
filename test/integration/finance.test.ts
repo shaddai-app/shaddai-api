@@ -57,7 +57,7 @@ describe('cajas y categorías', () => {
     const keys = cats.body.items.map((x: { kind: string; systemKey: string }) => `${x.kind}:${x.systemKey}`);
     expect(keys).toContain('income:tithe');
     expect(keys).toContain('expense:rent');
-    expect(cats.body.items).toHaveLength(14);
+    expect(cats.body.items).toHaveLength(15);
     const accounts = await request(app).get(api('/finance/accounts')).set(c.headers);
     expect(accounts.body.items).toMatchObject([
       { name: 'Caja general', type: 'cash', currency: 'ARS', balance: 0, openingDate: today() },

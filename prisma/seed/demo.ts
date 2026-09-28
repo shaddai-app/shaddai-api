@@ -32,6 +32,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoOfferings(prisma, existing.id);
     await seedDemoPeriods(prisma, existing.id);
     await seedDemoCalendar(prisma, existing.id);
+    await seedDemoRegistrations(prisma, existing.id);
     return;
   }
 
@@ -78,6 +79,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoOfferings(prisma, account.id);
   await seedDemoPeriods(prisma, account.id);
   await seedDemoCalendar(prisma, account.id);
+  await seedDemoRegistrations(prisma, account.id);
 }
 
 /**
@@ -526,6 +528,51 @@ async function seedDemoCalendar(prisma: PrismaClient, accountId: number) {
     });
   });
   console.log('✔ Calendario de ejemplo: 4 series, 2 excepciones y 2 eventos especiales');
+}
+
+/**
+ * Inscripciones de ejemplo: el retiro de jóvenes con cupo de 12, lista de espera, precio y enlace
+ * público (casi lleno) y los bautismos con inscripción sin precio. Idempotente.
+ */
+async function seedDemoRegistrations(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.eventRegistration.count({ where: { accountId } })) > 0) return;
+  const retreat = await prisma.calendarEvent.findFirst({
+    where: { accountId, title: 'Retiro de jóvenes', deletedAt: null },
+  });
+  const baptisms = await prisma.calendarEvent.findFirst({
+    where: { accountId, title: 'Bautismos', deletedAt: null },
+  });
+  if (!retreat || !baptisms) return;
+  await prisma.calendarEvent.update({
+    where: { id: retreat.id },
+    data: { registrationEnabled: true, capacity: 12, waitlistEnabled: true, price: 25_000, isPublic: true },
+  });
+  await prisma.calendarEvent.update({ where: { id: baptisms.id }, data: { registrationEnabled: true } });
+  const people = await prisma.person.findMany({
+    where: { accountId, deletedAt: null },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+    orderBy: { id: 'desc' },
+    take: 16,
+  });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const row = (eventId: number, at: Date, p: (typeof people)[number], status: string) => ({
+    accountId,
+    eventId,
+    occurrenceStart: at,
+    personId: p.id,
+    name: `${p.firstName} ${p.lastName}`,
+    email: p.email,
+    phone: p.phone,
+    status,
+    createdById: admin.id,
+  });
+  await prisma.eventRegistration.createMany({
+    data: [
+      ...people.slice(0, 11).map((p) => row(retreat.id, retreat.startsAt, p, 'confirmed')),
+      ...people.slice(11, 15).map((p) => row(baptisms.id, baptisms.startsAt, p, 'confirmed')),
+    ],
+  });
+  console.log('✔ Inscripciones de ejemplo: retiro (11 de 12, público) y bautismos');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
