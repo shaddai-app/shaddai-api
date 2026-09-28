@@ -31,6 +31,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoFinance(prisma, existing.id);
     await seedDemoOfferings(prisma, existing.id);
     await seedDemoPeriods(prisma, existing.id);
+    await seedDemoCalendar(prisma, existing.id);
     return;
   }
 
@@ -76,6 +77,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoFinance(prisma, account.id);
   await seedDemoOfferings(prisma, account.id);
   await seedDemoPeriods(prisma, account.id);
+  await seedDemoCalendar(prisma, account.id);
 }
 
 /**
@@ -430,6 +432,100 @@ async function seedDemoPeriods(prisma: PrismaClient, accountId: number) {
     return months.length;
   });
   console.log(`✔ ${closed} meses cerrados de ejemplo`);
+}
+
+/**
+ * Calendario de ejemplo: cultos de los domingos (10 y 18 h), reunión de oración de los miércoles,
+ * reunión de líderes el primer sábado de cada mes, un miércoles feriado cancelado, un culto con
+ * horario especial y dos eventos especiales. Usa el servicio de la API. Idempotente.
+ */
+async function seedDemoCalendar(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.calendarEvent.count({ where: { accountId } })) > 0) return;
+  const { runInContext } = await import('../../src/core/context.js');
+  const { addDays, dayOfWeek, todayIn } = await import('../../src/core/time/local-date.js');
+  const calendar = await import('../../src/modules/calendar/calendar.service.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const today = todayIn(account.timezone);
+  const next = (from: string, weekday: number) => {
+    let d = from;
+    while (dayOfWeek(d) !== weekday) d = addDays(d, 1);
+    return d;
+  };
+  const start = next(addDays(today, -90), 0); // un domingo de hace unos 3 meses
+  const viewer = { userId: admin.id } as Parameters<typeof calendar.createEvent>[0];
+  await runInContext({ requestId: 'seed', userId: admin.id, accountId }, async () => {
+    const weekly = { freq: 'weekly' as const, interval: 1 };
+    await calendar.createEvent(viewer, {
+      type: 'service',
+      title: 'Culto dominical',
+      location: 'Templo central',
+      startsAt: `${start}T10:00`,
+      endsAt: `${start}T12:00`,
+      allDay: false,
+      recurrence: weekly,
+    });
+    const evening = await calendar.createEvent(viewer, {
+      type: 'service',
+      title: 'Culto de la tarde',
+      location: 'Templo central',
+      startsAt: `${start}T18:00`,
+      endsAt: `${start}T20:00`,
+      allDay: false,
+      recurrence: weekly,
+    });
+    const wednesday = next(start, 3);
+    const prayer = await calendar.createEvent(viewer, {
+      type: 'meeting',
+      title: 'Reunión de oración',
+      startsAt: `${wednesday}T20:00`,
+      endsAt: `${wednesday}T21:30`,
+      allDay: false,
+      recurrence: weekly,
+    });
+    const firstSaturday = next(`${start.slice(0, 8)}01`, 6);
+    await calendar.createEvent(viewer, {
+      type: 'meeting',
+      title: 'Reunión de líderes',
+      startsAt: `${firstSaturday}T10:00`,
+      endsAt: `${firstSaturday}T12:00`,
+      allDay: false,
+      recurrence: { freq: 'monthly', interval: 1, monthlyBy: 'weekday' },
+    });
+    // Un miércoles feriado (en dos semanas) y un domingo con horario especial.
+    await calendar.setException(prayer.id, {
+      originalStart: `${next(addDays(today, 14), 3)}T20:00`,
+      cancelled: true,
+      note: 'Feriado',
+    });
+    const specialSunday = next(addDays(today, 7), 0);
+    await calendar.setException(evening.id, {
+      originalStart: `${specialSunday}T18:00`,
+      cancelled: false,
+      newStartsAt: `${specialSunday}T19:00`,
+      note: 'Horario especial: concierto de alabanza',
+    });
+    const friday = next(addDays(today, 20), 5);
+    await calendar.createEvent(viewer, {
+      type: 'special',
+      title: 'Retiro de jóvenes',
+      location: 'Campamento Monte Hermón',
+      startsAt: `${friday}T00:00`,
+      endsAt: `${addDays(friday, 2)}T23:59`,
+      allDay: true,
+    });
+    const saturday = next(addDays(today, 10), 6);
+    await calendar.createEvent(viewer, {
+      type: 'special',
+      title: 'Bautismos',
+      description: 'Traer ropa para cambiarse y toalla.',
+      location: 'Templo central',
+      startsAt: `${saturday}T16:00`,
+      endsAt: `${saturday}T18:00`,
+      allDay: false,
+    });
+  });
+  console.log('✔ Calendario de ejemplo: 4 series, 2 excepciones y 2 eventos especiales');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
