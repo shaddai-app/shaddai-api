@@ -3,6 +3,7 @@ import { writeXlsx } from '../../core/excel/spreadsheet.js';
 import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
+import * as attendance from './attendance.service.js';
 import * as calendar from './calendar.service.js';
 import * as registrations from './registrations.service.js';
 
@@ -105,6 +106,65 @@ t.post('/registrations/:id/payment', 'eventos.inscripciones', async (req, res) =
   const input = parse(registrations.PaymentSchema, req.body);
   res.status(201).json(await registrations.registerPayment(await viewerOf(req), id, input));
 });
+
+// ───────────── Asistencia ─────────────
+
+t.get('/attendance', ['asistencia.ver', 'asistencia.registrar'], async (req, res) => {
+  const q = parse(
+    attendance.AttendanceQuery.extend({ format: z.enum(['json', 'xlsx']).default('json') }),
+    req.query,
+  );
+  const data = await attendance.listAttendance(q);
+  if (q.format === 'json') {
+    res.json(data);
+    return;
+  }
+  const { locale } = parse(z.object({ locale: z.enum(['es', 'en', 'pt']).default('es') }), req.query);
+  const rows = data.items
+    .filter((i) => i.attendance)
+    .map((i) => {
+      const a = i.attendance!;
+      return [
+        new Date(`${i.startsAt.slice(0, 10)}T00:00:00Z`),
+        i.startsAt.slice(11),
+        i.title,
+        a.adults,
+        a.children,
+        a.inPerson,
+        a.newcomers,
+        a.online,
+        a.notes,
+      ];
+    });
+  res
+    .attachment(`asistencia-${q.from}-${q.to}.xlsx`)
+    .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(await writeXlsx(ATTENDANCE_SHEET[locale], ATTENDANCE_HEADERS[locale], rows));
+});
+
+t.get('/events/:id/attendance/:occurrence', ['asistencia.ver', 'asistencia.registrar'], async (req, res) => {
+  const { id, occurrence } = parse(attendance.OccurrenceParams, req.params);
+  res.json(await attendance.getAttendance(id, occurrence));
+});
+
+t.put('/events/:id/attendance/:occurrence', 'asistencia.registrar', async (req, res) => {
+  const { id, occurrence } = parse(attendance.OccurrenceParams, req.params);
+  const input = parse(attendance.AttendanceSchema, req.body);
+  res.json(await attendance.saveAttendance(await viewerOf(req), id, occurrence, input));
+});
+
+t.delete('/events/:id/attendance/:occurrence', 'asistencia.registrar', async (req, res) => {
+  const { id, occurrence } = parse(attendance.OccurrenceParams, req.params);
+  await attendance.deleteAttendance(id, occurrence);
+  res.status(204).end();
+});
+
+const ATTENDANCE_SHEET = { es: 'Asistencia', en: 'Attendance', pt: 'Presença' };
+const ATTENDANCE_HEADERS = {
+  es: ['Fecha', 'Hora', 'Evento', 'Adultos', 'Niños', 'Presenciales', 'Nuevos', 'Online', 'Notas'],
+  en: ['Date', 'Time', 'Event', 'Adults', 'Children', 'In person', 'Newcomers', 'Online', 'Notes'],
+  pt: ['Data', 'Hora', 'Evento', 'Adultos', 'Crianças', 'Presenciais', 'Novos', 'Online', 'Observações'],
+};
 
 const REGISTRATION_HEADERS = {
   es: ['Nombre', 'Email', 'Teléfono', 'Estado', 'Pagó', 'Notas'],

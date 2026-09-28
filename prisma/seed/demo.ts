@@ -33,6 +33,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoPeriods(prisma, existing.id);
     await seedDemoCalendar(prisma, existing.id);
     await seedDemoRegistrations(prisma, existing.id);
+    await seedDemoAttendance(prisma, existing.id);
     return;
   }
 
@@ -80,6 +81,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoPeriods(prisma, account.id);
   await seedDemoCalendar(prisma, account.id);
   await seedDemoRegistrations(prisma, account.id);
+  await seedDemoAttendance(prisma, account.id);
 }
 
 /**
@@ -573,6 +575,42 @@ async function seedDemoRegistrations(prisma: PrismaClient, accountId: number) {
     ],
   });
   console.log('✔ Inscripciones de ejemplo: retiro (11 de 12, público) y bautismos');
+}
+
+/**
+ * Asistencia de ejemplo de los cultos de los últimos 3 meses (con una tendencia en alza y alguna
+ * semana floja). Deja sin cargar el último culto, para ver los pendientes. Idempotente.
+ */
+async function seedDemoAttendance(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.serviceAttendance.count({ where: { accountId } })) > 0) return;
+  const { runInContext } = await import('../../src/core/context.js');
+  const { addDays, todayIn } = await import('../../src/core/time/local-date.js');
+  const attendance = await import('../../src/modules/calendar/attendance.service.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const today = todayIn(account.timezone);
+  const viewer = { userId: admin.id } as Parameters<typeof attendance.saveAttendance>[0];
+  const saved = await runInContext({ requestId: 'seed', userId: admin.id, accountId }, async () => {
+    const { items } = await attendance.listAttendance({ from: addDays(today, -100), to: today });
+    const pending = items.filter((i) => i.pending).reverse(); // del más viejo al más nuevo
+    const toLoad = pending.slice(0, -1);
+    for (const [n, item] of toLoad.entries()) {
+      const evening = item.startsAt.slice(11) >= '17:00';
+      const base = (evening ? 70 : 120) + n; // crece de a poco
+      const dip = n % 5 === 3 ? -25 : 0; // alguna semana floja (lluvia, fin de semana largo)
+      const adults = base + dip + ((n * 7) % 11);
+      const children = evening ? 8 + (n % 4) : 25 + ((n * 3) % 9);
+      await attendance.saveAttendance(viewer, item.eventId, item.originalStart, {
+        adults,
+        children,
+        newcomers: n % 3 === 0 ? 4 : n % 3,
+        online: evening ? 15 + (n % 6) : 40 + ((n * 5) % 17),
+        notes: dip ? 'Día de lluvia' : null,
+      });
+    }
+    return toLoad.length;
+  });
+  console.log(`✔ Asistencia de ejemplo: ${saved} cultos cargados y el último pendiente`);
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

@@ -7,7 +7,7 @@ import { dateToLocal, localToDate, nowLocalIn } from '../../core/time/local-date
 import { createMovement, ensureSystemCategory } from '../finance/finance.service.js';
 import { normalizePhone } from '../people/people.service.js';
 import { scopeOf, type Viewer } from '../people/people.scope.js';
-import { isOccurrence, occurrences } from './recurrence.js';
+import { alignOccurrence, isOccurrence, occurrences } from './recurrence.js';
 
 // Inscripciones a una fecha de un evento. Cupo por fecha; con cupo lleno, lista de espera (si está
 // habilitada) que sube por orden de llegada cuando alguien cancela o se amplía el cupo.
@@ -328,19 +328,10 @@ export async function realignRegistrations(eventId: number, rule: string | null,
   });
   let orphans = 0;
   for (const r of regs) {
-    const valid = rule
-      ? isOccurrence(rule, start, r.occurrenceStart)
-      : r.occurrenceStart.getTime() === start.getTime();
-    if (valid) continue;
-    const day = dateToLocal(r.occurrenceStart).slice(0, 10);
-    const candidate = rule
-      ? occurrences(rule, start, localToDate(`${day}T00:00`), localToDate(`${day}T23:59`))[0]
-      : dateToLocal(start).slice(0, 10) === day
-        ? start
-        : undefined;
-    if (candidate)
-      await db.eventRegistration.update({ where: { id: r.id }, data: { occurrenceStart: candidate } });
-    else orphans++;
+    const aligned = alignOccurrence(rule, start, r.occurrenceStart);
+    if (!aligned) orphans++;
+    else if (aligned.getTime() !== r.occurrenceStart.getTime())
+      await db.eventRegistration.update({ where: { id: r.id }, data: { occurrenceStart: aligned } });
   }
   return orphans;
 }

@@ -7,6 +7,7 @@ import { dateToLocal, localToDate, nowLocalIn } from '../../core/time/local-date
 import { cellWhereFor } from '../cells/cells.service.js';
 import type { Viewer } from '../people/people.scope.js';
 import { endBefore, fromRule, isOccurrence, occurrences, Recurrence, toRule } from './recurrence.js';
+import { realignAttendance } from './attendance.service.js';
 import { promoteWaitlist, realignRegistrations } from './registrations.service.js';
 
 // ───────────── Constantes y esquemas ─────────────
@@ -289,6 +290,24 @@ async function cellMeetings(viewer: Viewer, from: Date, to: Date): Promise<Occur
 
 // ───────────── Calendario ─────────────
 
+/** Fechas (con excepciones aplicadas) de los eventos que cumplen `where`, entre from y to. */
+export async function eventOccurrences(where: Prisma.CalendarEventWhereInput, from: Date, to: Date) {
+  const events = await tenantDb().calendarEvent.findMany({
+    where: {
+      AND: [
+        where,
+        {
+          deletedAt: null,
+          startsAt: { lte: new Date(to.getTime() + MAX_SHIFT_DAYS * DAY) },
+          OR: [{ rrule: { not: null } }, { endsAt: { gte: from } }],
+        },
+      ],
+    },
+    select: eventSelect,
+  });
+  return events.flatMap((e) => expand(e, from, to));
+}
+
 /** Fechas del período (eventos expandidos + reuniones de célula), ordenadas por inicio. */
 export async function calendar(viewer: Viewer, q: z.infer<typeof CalendarQuery>) {
   if (q.to < q.from) throw AppError.badRequest('DATE_RANGE_INVALID');
@@ -301,19 +320,8 @@ export async function calendar(viewer: Viewer, q: z.infer<typeof CalendarQuery>)
   const eventTypes = (types ?? [...EVENT_TYPES]).filter((t) =>
     (EVENT_TYPES as readonly string[]).includes(t),
   );
-  const events = eventTypes.length
-    ? await tenantDb().calendarEvent.findMany({
-        where: {
-          deletedAt: null,
-          type: { in: eventTypes },
-          startsAt: { lte: new Date(to.getTime() + MAX_SHIFT_DAYS * DAY) },
-          OR: [{ rrule: { not: null } }, { endsAt: { gte: from } }],
-        },
-        select: eventSelect,
-      })
-    : [];
   const items = [
-    ...events.flatMap((e) => expand(e, from, to)),
+    ...(eventTypes.length ? await eventOccurrences({ type: { in: eventTypes } }, from, to) : []),
     ...(!types || types.includes('cell') ? await cellMeetings(viewer, from, to) : []),
   ].sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.title.localeCompare(b.title));
   return { from: q.from, to: q.to, items };
@@ -441,8 +449,10 @@ export async function updateEvent(id: number, input: z.infer<typeof UpdateEventS
     before: { title: before.title, startsAt: dateToLocal(before.startsAt), rrule: before.rrule },
     after: { changed: Object.keys(input), removedExceptions: stale.length },
   });
-  // Las inscripciones siguen a su fecha si cambió el horario, y con más cupo sube la lista de espera.
+  // Las inscripciones y la asistencia siguen a su fecha si cambió el horario, y con más cupo sube
+  // la lista de espera.
   await realignRegistrations(id, rrule, start, localToDate(range.endsAt));
+  await realignAttendance(id, rrule, start);
   await promoteWaitlist(id);
   return { ...(await getEvent(id)), removedExceptions: stale.length };
 }
@@ -507,14 +517,19 @@ export async function splitEvent(viewer: Viewer, id: number, input: z.infer<type
       },
       select: { id: true },
     });
-    // Las inscripciones de las fechas que pasan al evento nuevo lo acompañan.
+    // Las inscripciones y la asistencia de las fechas que pasan al evento nuevo lo acompañan.
     await tx.eventRegistration.updateMany({
+      where: { eventId: id, occurrenceStart: { gte: at } },
+      data: { eventId: created.id },
+    });
+    await tx.serviceAttendance.updateMany({
       where: { eventId: id, occurrenceStart: { gte: at } },
       data: { eventId: created.id },
     });
     return created.id;
   });
   await realignRegistrations(createdId, newRule, newStart, localToDate(range.endsAt));
+  await realignAttendance(createdId, newRule, newStart);
   await audit({
     action: 'calendar.event.split',
     entity: 'CalendarEvent',

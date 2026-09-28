@@ -30,6 +30,7 @@ model CalendarEvent {
   deletedAt           DateTime?
   exceptions          EventException[]
   registrations       EventRegistration[]
+  attendances         ServiceAttendance[]
 
   @@index([accountId, startsAt])
   @@index([accountId, type])
@@ -77,4 +78,25 @@ model EventRegistration {
   @@index([accountId, eventId, occurrenceStart, status])
   @@index([accountId, personId])
   @@index([paymentMovementId])
+}
+
+// Asistencia de una fecha de un evento (los cultos, sobre todo): conteo por categoría, sin nombres.
+model ServiceAttendance {
+  id              Int           @id @default(autoincrement())
+  accountId       Int
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventId         Int
+  event           CalendarEvent @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occurrenceStart DateTime // hora local de la fecha (inicio original en los recurrentes)
+  adults          Int           @default(0)
+  children        Int           @default(0)
+  newcomers       Int           @default(0) // primera vez (ya incluidos en adultos/niños)
+  online          Int           @default(0) // conexiones o personas que lo vieron en vivo
+  notes           String?       @db.NVarChar(500)
+  recordedById    Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([eventId, occurrenceStart])
+  @@index([accountId, occurrenceStart])
 }
