@@ -37,6 +37,9 @@ export const TENANT_MODELS = new Set([
   'ConsolidationStep',
   'ConsolidationCase',
   'FollowUp',
+  'FinanceAccount',
+  'FinanceCategory',
+  'FinanceMovement',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -49,6 +52,10 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   ConsolidationCaseStep: {
     case: { fk: 'caseId', parent: 'ConsolidationCase' },
     step: { fk: 'stepId', parent: 'ConsolidationStep' },
+  },
+  MovementAttachment: {
+    movement: { fk: 'movementId', parent: 'FinanceMovement' },
+    file: { fk: 'fileId', parent: 'FileObject' },
   },
   CellReportAttendance: {
     report: { fk: 'reportId', parent: 'CellReport' },

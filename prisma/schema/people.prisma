@@ -74,6 +74,7 @@ model Person {
   cellAttendance     CellReportAttendance[]
   consolidationCases ConsolidationCase[]
   followUps          FollowUp[]
+  financeMovements   FinanceMovement[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])

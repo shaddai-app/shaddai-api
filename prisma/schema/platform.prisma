@@ -60,6 +60,9 @@ model Account {
   consolidationSteps  ConsolidationStep[]
   consolidationCases  ConsolidationCase[]
   followUps           FollowUp[]
+  financeAccounts     FinanceAccount[]
+  financeCategories   FinanceCategory[]
+  financeMovements    FinanceMovement[]
 
   @@index([status])
 }

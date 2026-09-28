@@ -28,6 +28,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoCells(prisma, existing.id);
     await seedDemoReports(prisma, existing.id);
     await seedDemoConsolidation(prisma, existing.id);
+    await seedDemoFinance(prisma, existing.id);
     return;
   }
 
@@ -70,12 +71,217 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoCells(prisma, account.id);
   await seedDemoReports(prisma, account.id);
   await seedDemoConsolidation(prisma, account.id);
+  await seedDemoFinance(prisma, account.id);
 }
 
 /**
  * Casos de consolidación de ejemplo para visitantes y nuevos: algunos asignados a demo-pastor,
  * con pasos avanzados y uno vencido. Idempotente.
  */
+/**
+ * Libro de caja de ejemplo (~3 meses): diezmos nominales y ofrendas de los domingos, alquiler y
+ * servicios mensuales, depósitos de la caja al banco y una caja en dólares. Idempotente.
+ */
+async function seedDemoFinance(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.financeMovement.count({ where: { accountId } })) > 0) return;
+  const { CATEGORY_KINDS, DEFAULT_CATEGORIES } = await import('../../src/modules/finance/finance.service.js');
+  const { addDays, dayOfWeek, todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  if ((await prisma.financeCategory.count({ where: { accountId } })) === 0) {
+    await prisma.financeCategory.createMany({
+      data: CATEGORY_KINDS.flatMap((kind) =>
+        DEFAULT_CATEGORIES[kind].map((systemKey, i) => ({
+          accountId,
+          kind,
+          systemKey,
+          sortOrder: (i + 1) * 10,
+        })),
+      ),
+    });
+  }
+  const categories = await prisma.financeCategory.findMany({ where: { accountId } });
+  const cat = (key: string) => categories.find((c) => c.systemKey === key)!.id;
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const today = todayIn(account.timezone);
+  const start = addDays(today, -98);
+  const treasurer =
+    (await prisma.user.findFirst({ where: { accountId, email: 'demo-tesorero@shaddai.local' } })) ??
+    (await prisma.user.findFirstOrThrow({ where: { accountId } }));
+
+  // La caja general la crea la plantilla en las cuentas nuevas; la demo puede ser anterior.
+  const cash =
+    (await prisma.financeAccount.findFirst({
+      where: { accountId, type: 'cash', currency: account.currency },
+    })) ??
+    (await prisma.financeAccount.create({
+      data: {
+        accountId,
+        name: 'Caja general',
+        type: 'cash',
+        currency: account.currency,
+        openingDate: toDate(start),
+      },
+    }));
+  await prisma.financeAccount.update({
+    where: { id: cash.id },
+    data: { openingDate: toDate(start), openingBalance: 85_000 },
+  });
+  const bank = await prisma.financeAccount.create({
+    data: {
+      accountId,
+      name: 'Banco Nación',
+      type: 'bank',
+      currency: account.currency,
+      openingBalance: 420_000,
+      openingDate: toDate(start),
+      responsibleUserId: treasurer.id,
+    },
+  });
+  const usd = await prisma.financeAccount.create({
+    data: {
+      accountId,
+      name: 'Caja en dólares',
+      type: 'cash',
+      currency: 'USD',
+      openingBalance: 600,
+      openingDate: toDate(start),
+    },
+  });
+
+  const givers = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, status: { systemKey: 'member' } },
+    orderBy: { id: 'asc' },
+    take: 8,
+  });
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31;
+  const round = (v: number, step: number) => Math.max(step, Math.round(v / step) * step);
+  type Row = {
+    financeAccountId: number;
+    categoryId: number | null;
+    kind: string;
+    date: string;
+    amount: number;
+  } & {
+    personId?: number;
+    isAnonymous?: boolean;
+    paymentMethod?: string;
+    description?: string;
+  };
+  const rows: Row[] = [];
+  for (let d = start; d <= today; d = addDays(d, 1)) {
+    if (dayOfWeek(d) === 0) {
+      // Domingo: diezmos nominales (algunos por transferencia al banco) y ofrenda del culto.
+      for (const g of givers) {
+        if (rnd() < 0.35) continue;
+        const byTransfer = rnd() < 0.3;
+        rows.push({
+          financeAccountId: byTransfer ? bank.id : cash.id,
+          categoryId: cat('tithe'),
+          kind: 'income',
+          date: d,
+          amount: round(8_000 + rnd() * 45_000, 500),
+          personId: g.id,
+          paymentMethod: byTransfer ? 'transfer' : 'cash',
+        });
+      }
+      rows.push({
+        financeAccountId: cash.id,
+        categoryId: cat('offering'),
+        kind: 'income',
+        date: d,
+        amount: round(25_000 + rnd() * 60_000, 100),
+        isAnonymous: true,
+        paymentMethod: 'cash',
+        description: 'Ofrenda del culto',
+      });
+    }
+    const day = Number(d.slice(8, 10));
+    if (day === 5) {
+      rows.push({
+        financeAccountId: bank.id,
+        categoryId: cat('rent'),
+        kind: 'expense',
+        date: d,
+        amount: 210_000,
+        paymentMethod: 'transfer',
+        description: 'Alquiler del templo',
+      });
+      rows.push({
+        financeAccountId: bank.id,
+        categoryId: cat('utilities'),
+        kind: 'expense',
+        date: d,
+        amount: round(35_000 + rnd() * 25_000, 10),
+        paymentMethod: 'transfer',
+        description: 'Luz y gas',
+      });
+    }
+    if (day === 12) {
+      rows.push({
+        financeAccountId: cash.id,
+        categoryId: cat('supplies'),
+        kind: 'expense',
+        date: d,
+        amount: round(8_000 + rnd() * 20_000, 10),
+        paymentMethod: 'cash',
+        description: 'Artículos de limpieza',
+      });
+      rows.push({
+        financeAccountId: bank.id,
+        categoryId: cat('missions'),
+        kind: 'expense',
+        date: d,
+        amount: 50_000,
+        paymentMethod: 'transfer',
+        description: 'Aporte a misioneros',
+      });
+    }
+  }
+  rows.push({
+    financeAccountId: usd.id,
+    categoryId: cat('special_offering'),
+    kind: 'income',
+    date: addDays(start, 20),
+    amount: 200,
+    isAnonymous: true,
+    paymentMethod: 'cash',
+    description: 'Ofrenda misionera',
+  });
+  rows.push({
+    financeAccountId: usd.id,
+    categoryId: cat('missions'),
+    kind: 'expense',
+    date: addDays(start, 50),
+    amount: 350,
+    paymentMethod: 'cash',
+    description: 'Envío a misión en Bolivia',
+  });
+
+  await prisma.financeMovement.createMany({
+    data: rows.map((r) => ({ ...r, accountId, date: toDate(r.date), createdById: treasurer.id })),
+  });
+  // Depósitos quincenales de la caja al banco (transferencias con sus dos patas enlazadas).
+  let transfers = 0;
+  for (let d = addDays(start, 14); d <= today; d = addDays(d, 14)) {
+    const base = {
+      accountId,
+      date: toDate(d),
+      amount: 150_000,
+      description: 'Depósito en el banco',
+      createdById: treasurer.id,
+    };
+    const out = await prisma.financeMovement.create({
+      data: { ...base, financeAccountId: cash.id, kind: 'transfer_out' },
+    });
+    const inbound = await prisma.financeMovement.create({
+      data: { ...base, financeAccountId: bank.id, kind: 'transfer_in', transferPairId: out.id },
+    });
+    await prisma.financeMovement.update({ where: { id: out.id }, data: { transferPairId: inbound.id } });
+    transfers++;
+  }
+  console.log(`✔ ${rows.length} movimientos y ${transfers} transferencias de ejemplo en 3 cajas`);
+}
+
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
   if ((await prisma.consolidationCase.count({ where: { accountId } })) > 0) return;
   const { DEFAULT_STEPS } = await import('../../src/modules/consolidation/consolidation.service.js');
