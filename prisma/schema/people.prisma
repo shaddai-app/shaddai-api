@@ -75,6 +75,9 @@ model Person {
   consolidationCases ConsolidationCase[]
   followUps          FollowUp[]
   financeMovements   FinanceMovement[]
+  countedOfferings1  OfferingCount[]        @relation("OfferingCounter1")
+  countedOfferings2  OfferingCount[]        @relation("OfferingCounter2")
+  offeringEnvelopes  OfferingCountLine[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])

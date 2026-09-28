@@ -34,7 +34,7 @@ export const DEFAULT_CATEGORIES: Record<(typeof CATEGORY_KINDS)[number], string[
 
 type Db = ReturnType<typeof tenantDb> | Prisma.TransactionClient;
 
-async function accountToday() {
+export async function accountToday() {
   const { timezone } = await tenantDb().account.findUniqueOrThrow({
     where: { id: currentAccountId() },
     select: { timezone: true },
@@ -192,7 +192,7 @@ const accountSelect = {
 
 /**
  * Saldo por caja: apertura + ingresos y transferencias recibidas − egresos y transferencias enviadas.
- * Solo cuentan los movimientos confirmados (los anulados no; los pendientes llegan en el tramo 2).
+ * Solo cuentan los movimientos confirmados (ni los anulados ni los pendientes ni los rechazados).
  */
 export async function balances(accountIds?: number[], asOf?: string): Promise<Map<number, Money>> {
   const db = tenantDb();
@@ -211,6 +211,7 @@ export async function balances(accountIds?: number[], asOf?: string): Promise<Ma
   });
   const result = new Map(accounts.map((a) => [a.id, toMoney(a.openingBalance)]));
   for (const s of sums) {
+    if (s.financeAccountId === null) continue; // no pasa: los confirmados siempre tienen caja
     const value = s._sum.amount ?? ZERO;
     const current = result.get(s.financeAccountId) ?? ZERO;
     result.set(s.financeAccountId, INFLOW.has(s.kind) ? current.plus(value) : current.minus(value));
@@ -347,7 +348,7 @@ export async function deleteAccount(id: number) {
 
 // ───────────── Movimientos ─────────────
 
-const optionalText = (max: number) =>
+export const optionalText = (max: number) =>
   z
     .string()
     .trim()
@@ -393,7 +394,7 @@ export const ListMovementsQuery = PaginationQuery.extend({
   q: z.string().trim().max(100).optional(),
 });
 
-const movementSelect = {
+export const movementSelect = {
   id: true,
   kind: true,
   date: true,
@@ -404,6 +405,7 @@ const movementSelect = {
   reference: true,
   status: true,
   transferPairId: true,
+  confirmedAt: true,
   voidedAt: true,
   voidReason: true,
   createdById: true,
@@ -412,15 +414,18 @@ const movementSelect = {
   financeAccount: { select: { id: true, name: true, currency: true } },
   category: { select: { id: true, kind: true, systemKey: true, name: true } },
   person: { select: { id: true, firstName: true, lastName: true } },
+  cellReport: { select: { id: true, meetingDate: true, cell: { select: { id: true, name: true } } } },
+  offeringCount: { select: { id: true, title: true } },
   _count: { select: { attachments: true } },
 } as const;
 
 type MovementRow = Prisma.FinanceMovementGetPayload<{ select: typeof movementSelect }>;
 
-function presentMovement(row: MovementRow, viewer: Viewer) {
-  const { amount: value, date, person, _count, ...rest } = row;
+export function presentMovement(row: MovementRow, viewer: Viewer) {
+  const { amount: value, date, person, _count, cellReport, ...rest } = row;
   return {
     ...rest,
+    cellReport: cellReport && { ...cellReport, meetingDate: isoDate(cellReport.meetingDate) },
     date: isoDate(date),
     amount: present(value),
     attachmentCount: _count.attachments,
@@ -457,11 +462,13 @@ function movementWhere(
 /** Totales de ingresos y egresos del filtro, por moneda (las transferencias no son ingreso ni egreso). */
 async function totalsByCurrency(where: Prisma.FinanceMovementWhereInput) {
   const db = tenantDb();
-  const sums = await db.financeMovement.groupBy({
-    by: ['financeAccountId', 'kind'],
-    where: { AND: [where, { kind: { in: ['income', 'expense'] } }] },
-    _sum: { amount: true },
-  });
+  const sums = (
+    await db.financeMovement.groupBy({
+      by: ['financeAccountId', 'kind'],
+      where: { AND: [where, { kind: { in: ['income', 'expense'] } }, { financeAccountId: { not: null } }] },
+      _sum: { amount: true },
+    })
+  ).filter((s): s is typeof s & { financeAccountId: number } => s.financeAccountId !== null);
   const accounts = await db.financeAccount.findMany({
     where: { id: { in: [...new Set(sums.map((s) => s.financeAccountId))] } },
     select: { id: true, currency: true },
@@ -533,7 +540,7 @@ export async function getMovement(viewer: Viewer, id: number) {
 
 // ── Validaciones de referencias (siempre dentro de la cuenta) ──
 
-async function usableAccount(id: number, date: string) {
+export async function usableAccount(id: number, date: string) {
   const account = await tenantDb().financeAccount.findUnique({ where: { id } });
   if (!account) throw AppError.badRequest('FINANCE_ACCOUNT_INVALID');
   if (!account.isActive) throw AppError.conflict('FINANCE_ACCOUNT_INACTIVE');
@@ -543,7 +550,7 @@ async function usableAccount(id: number, date: string) {
   return account;
 }
 
-async function usableCategory(id: number, kind: string) {
+export async function usableCategory(id: number, kind: string) {
   const category = await tenantDb().financeCategory.findUnique({ where: { id } });
   if (!category) throw AppError.badRequest('CATEGORY_INVALID');
   if (category.kind !== kind) throw AppError.badRequest('CATEGORY_KIND_MISMATCH');
@@ -558,8 +565,18 @@ async function assertContributor(viewer: Viewer, personId: number | null | undef
   }
 }
 
-async function assertDate(date: string) {
+export async function assertDate(date: string) {
   if (date > (await accountToday())) throw AppError.badRequest('DATE_IN_FUTURE');
+}
+
+/**
+ * Solo se editan o anulan uno por uno los movimientos confirmados cargados a mano: los pendientes se
+ * confirman o rechazan, y los de un arqueo se anulan con el arqueo entero.
+ */
+function assertOwnMovement(m: { status: string; offeringCountId: number | null }) {
+  if (m.status === 'voided' || m.status === 'rejected') throw AppError.conflict('MOVEMENT_VOIDED');
+  if (m.status === 'pending') throw AppError.conflict('MOVEMENT_PENDING');
+  if (m.offeringCountId) throw AppError.conflict('MOVEMENT_FROM_COUNT', { countId: m.offeringCountId });
 }
 
 export async function createMovement(viewer: Viewer, input: z.infer<typeof CreateMovementSchema>) {
@@ -606,15 +623,16 @@ export async function updateMovement(
   const db = tenantDb();
   const before = await db.financeMovement.findUnique({ where: { id } });
   if (!before) throw AppError.notFound('MOVEMENT_NOT_FOUND');
-  if (before.status === 'voided') throw AppError.conflict('MOVEMENT_VOIDED');
+  assertOwnMovement(before);
   // Una transferencia son dos movimientos enlazados: se anula y se vuelve a cargar.
   if (before.transferPairId) throw AppError.conflict('TRANSFER_EDIT_FORBIDDEN');
   const date = input.date ?? isoDate(before.date)!;
   if (input.date) await assertDate(input.date);
-  const targetAccount = input.financeAccountId ?? before.financeAccountId;
+  const currentAccount = before.financeAccountId!; // confirmado: siempre tiene caja
+  const targetAccount = input.financeAccountId ?? currentAccount;
   if (input.financeAccountId || input.date) {
     const account = await usableAccount(targetAccount, date);
-    const current = await db.financeAccount.findUniqueOrThrow({ where: { id: before.financeAccountId } });
+    const current = await db.financeAccount.findUniqueOrThrow({ where: { id: currentAccount } });
     if (account.currency !== current.currency) throw AppError.conflict('FINANCE_CURRENCY_MISMATCH');
   }
   if (input.categoryId) await usableCategory(input.categoryId, before.kind);
@@ -651,7 +669,7 @@ export async function voidMovement(viewer: Viewer, id: number, reason: string) {
   const db = tenantDb();
   const movement = await db.financeMovement.findUnique({ where: { id } });
   if (!movement) throw AppError.notFound('MOVEMENT_NOT_FOUND');
-  if (movement.status === 'voided') throw AppError.conflict('MOVEMENT_VOIDED');
+  assertOwnMovement(movement);
   // Anular una transferencia anula las dos patas.
   const ids = movement.transferPairId ? [id, movement.transferPairId] : [id];
   await db.financeMovement.updateMany({
@@ -712,7 +730,7 @@ export async function summary(viewer: Viewer) {
   const today = await accountToday();
   const monthStart = `${today.slice(0, 8)}01`;
   const db = tenantDb();
-  const [accounts, month, recent] = await Promise.all([
+  const [accounts, month, recent, pending, drafts] = await Promise.all([
     listAccounts(false),
     totalsByCurrency({ status: 'confirmed', date: { gte: toDate(monthStart), lte: toDate(today) } }),
     db.financeMovement.findMany({
@@ -721,10 +739,14 @@ export async function summary(viewer: Viewer) {
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
       take: 8,
     }),
+    db.financeMovement.count({ where: { status: 'pending' } }),
+    db.offeringCount.count({ where: { status: 'draft' } }),
   ]);
   return {
     today,
     month: { from: monthStart, to: today, totals: month },
+    /** Ofrendas de célula por confirmar y arqueos en borrador (avisos del tablero). */
+    pending: { movements: pending, counts: drafts },
     accounts,
     recent: recent.map((r) => presentMovement(r, viewer)),
   };

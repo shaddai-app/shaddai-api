@@ -16,6 +16,11 @@ import {
 import { fold, insertPerson, isoDate, normalizePhone } from '../people/people.service.js';
 import { ownZoneWhere, scopeOf, type Viewer } from '../people/people.scope.js';
 import { openCase } from '../consolidation/consolidation.service.js';
+import {
+  assertOfferingChangeAllowed,
+  releaseCellOffering,
+  syncCellOffering,
+} from '../finance/offerings.service.js';
 import { cellWhereFor, idsInScope, inScope } from './cells.service.js';
 
 /** Días de tolerancia después de la reunión antes de marcar el reporte como faltante (rojo). */
@@ -115,6 +120,8 @@ const reportSelect = {
   submittedById: true,
   submittedAt: true,
   updatedAt: true,
+  // Estado de la ofrenda en tesorería (el último movimiento: pending, confirmed o rejected).
+  financeMovements: { select: { status: true }, orderBy: { id: 'desc' }, take: 1 },
   cell: { select: { id: true, name: true, zone: { select: { id: true, name: true } } } },
   attendance: {
     select: {
@@ -127,13 +134,14 @@ const reportSelect = {
 type ReportRow = Prisma.CellReportGetPayload<{ select: typeof reportSelect }>;
 
 function present(r: ReportRow, withPeople: boolean) {
-  const { attendance, meetingDate, offeringAmount, ...rest } = r;
+  const { attendance, meetingDate, offeringAmount, financeMovements, ...rest } = r;
   const members = attendance.filter((a) => !a.isVisitor);
   const visitors = attendance.filter((a) => a.isVisitor);
   return {
     ...rest,
     meetingDate: isoDate(meetingDate)!,
     offeringAmount: offeringAmount === null ? null : Number(offeringAmount),
+    offeringStatus: financeMovements[0]?.status ?? null,
     totals: {
       members: members.length,
       visitors: visitors.length + r.anonymousVisitors,
@@ -275,6 +283,12 @@ export async function createReport(
     },
     select: { id: true },
   });
+  await syncCellOffering(viewer, {
+    id: report.id,
+    held: input.held,
+    meetingDate,
+    offeringAmount: input.offeringAmount ?? null,
+  });
   await audit({
     action: 'cells.report.create',
     entity: 'CellReport',
@@ -308,6 +322,11 @@ export async function updateReport(viewer: Viewer, id: number, input: z.infer<ty
   const held = input.held ?? report.held;
   if (!held && !(input.notHeldReason ?? report.notHeldReason))
     throw AppError.badRequest('NOT_HELD_REASON_REQUIRED');
+  const offering = {
+    held,
+    offeringAmount: input.offeringAmount !== undefined ? input.offeringAmount : report.offeringAmount,
+  };
+  await assertOfferingChangeAllowed(id, report, offering);
 
   const replaceAttendance =
     input.attendance !== undefined ||
@@ -336,6 +355,11 @@ export async function updateReport(viewer: Viewer, id: number, input: z.infer<ty
       ...(attendance ? { attendance: { deleteMany: {}, create: attendance } } : {}),
     },
   });
+  await syncCellOffering(viewer, {
+    id,
+    ...offering,
+    meetingDate: meetingDate ?? isoDate(report.meetingDate)!,
+  });
   await audit({
     action: 'cells.report.update',
     entity: 'CellReport',
@@ -348,6 +372,8 @@ export async function updateReport(viewer: Viewer, id: number, input: z.infer<ty
 export async function deleteReport(viewer: Viewer, id: number) {
   const report = await findReport(viewer, id, 'celulas.reportar');
   assertWindow(viewer, isoDate(report.meetingDate)!, await accountClock());
+  await assertOfferingChangeAllowed(id, report, null);
+  await releaseCellOffering(id);
   await tenantDb().cellReport.delete({ where: { id } });
   await audit({
     action: 'cells.report.delete',

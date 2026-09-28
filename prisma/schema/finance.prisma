@@ -18,20 +18,22 @@ model FinanceAccount {
   isActive          Boolean           @default(true)
   createdAt         DateTime          @default(now())
   movements         FinanceMovement[]
+  offeringCounts    OfferingCount[]
 
   @@index([accountId])
 }
 
 model FinanceCategory {
-  id        Int               @id @default(autoincrement())
-  accountId Int
-  account   Account           @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  kind      String            @db.VarChar(7) // income|expense
-  systemKey String?           @db.VarChar(40) // tithe|offering|… (nombre traducido si name es null)
-  name      String?           @db.NVarChar(100)
-  sortOrder Int
-  isActive  Boolean           @default(true)
-  movements FinanceMovement[]
+  id         Int                 @id @default(autoincrement())
+  accountId  Int
+  account    Account             @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  kind       String              @db.VarChar(7) // income|expense
+  systemKey  String?             @db.VarChar(40) // tithe|offering|… (nombre traducido si name es null)
+  name       String?             @db.NVarChar(100)
+  sortOrder  Int
+  isActive   Boolean             @default(true)
+  movements  FinanceMovement[]
+  countLines OfferingCountLine[]
 
   @@index([accountId, kind])
 }
@@ -40,8 +42,8 @@ model FinanceMovement {
   id               Int                  @id @default(autoincrement())
   accountId        Int
   account          Account              @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  financeAccountId Int
-  financeAccount   FinanceAccount       @relation(fields: [financeAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  financeAccountId Int? // null solo en pendientes (tesorería elige la caja al confirmar) y rechazados
+  financeAccount   FinanceAccount?      @relation(fields: [financeAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   categoryId       Int? // null en transferencias
   category         FinanceCategory?     @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   kind             String               @db.VarChar(12) // income|expense|transfer_in|transfer_out
@@ -53,9 +55,16 @@ model FinanceMovement {
   isAnonymous      Boolean              @default(false)
   paymentMethod    String?              @db.VarChar(10) // cash|transfer|card|wallet|other
   reference        String?              @db.NVarChar(100)
-  status           String               @default("confirmed") @db.VarChar(10) // confirmed|voided (pending: tramo 2)
+  // pending (ofrenda de célula sin confirmar) | confirmed | voided | rejected (pendiente rechazado)
+  status           String               @default("confirmed") @db.VarChar(10)
   transferPairId   Int? // el otro movimiento de la transferencia (sin FK: evita ciclos en SQL Server)
-  voidedAt         DateTime?
+  cellReportId     Int? // ofrenda de un reporte de célula
+  cellReport       CellReport?          @relation(fields: [cellReportId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  offeringCountId  Int? // generado al confirmar un arqueo
+  offeringCount    OfferingCount?       @relation(fields: [offeringCountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  confirmedAt      DateTime? // pendiente confirmado por tesorería
+  confirmedById    Int?
+  voidedAt         DateTime? // anulado o rechazado (voidReason es el motivo en los dos casos)
   voidedById       Int?
   voidReason       String?              @db.NVarChar(300)
   createdById      Int
@@ -69,6 +78,8 @@ model FinanceMovement {
   @@index([accountId, personId])
   @@index([accountId, status])
   @@index([transferPairId])
+  @@index([cellReportId])
+  @@index([offeringCountId])
 }
 
 // Comprobantes (foto o PDF) de un movimiento.
@@ -81,4 +92,56 @@ model MovementAttachment {
 
   @@id([movementId, fileId])
   @@index([fileId])
+}
+
+// Arqueo de culto: dos personas cuentan la ofrenda y firman. Mientras es borrador se corrige; al
+// confirmarlo se generan los ingresos en la caja (uno por categoría y medio de pago, y uno por cada
+// sobre nominal). Confirmado no se edita: se anula entero (anula sus movimientos) y se vuelve a cargar.
+model OfferingCount {
+  id               Int                 @id @default(autoincrement())
+  accountId        Int
+  account          Account             @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  financeAccountId Int
+  financeAccount   FinanceAccount      @relation(fields: [financeAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  date             DateTime            @db.Date
+  title            String?             @db.NVarChar(100) // "Culto domingo 10 h"
+  counter1PersonId Int
+  counter1         Person              @relation("OfferingCounter1", fields: [counter1PersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  counter2PersonId Int
+  counter2         Person              @relation("OfferingCounter2", fields: [counter2PersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status           String              @default("draft") @db.VarChar(10) // draft|confirmed|voided
+  notes            String?             @db.NVarChar(500)
+  createdById      Int
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  confirmedAt      DateTime?
+  confirmedById    Int?
+  voidedAt         DateTime?
+  voidedById       Int?
+  voidReason       String?             @db.NVarChar(300)
+  lines            OfferingCountLine[]
+  movements        FinanceMovement[]
+
+  @@index([accountId, date])
+  @@index([accountId, status])
+}
+
+// Renglón del arqueo: billetes de una denominación (denominación × cantidad), un total por medio de
+// pago o un sobre de diezmo con nombre (personId).
+model OfferingCountLine {
+  id            Int             @id @default(autoincrement())
+  countId       Int
+  count         OfferingCount   @relation(fields: [countId], references: [id], onDelete: Cascade)
+  categoryId    Int
+  category      FinanceCategory @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentMethod String          @db.VarChar(10) // cash|transfer|card|wallet|other
+  denomination  Decimal?        @db.Decimal(10, 2)
+  quantity      Int?
+  amount        Decimal         @db.Decimal(18, 2)
+  personId      Int? // sobre nominal: solo visible con finanzas.diezmos_nominales
+  person        Person?         @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sortOrder     Int
+
+  @@index([countId])
+  @@index([personId])
 }

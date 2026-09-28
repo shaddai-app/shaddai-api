@@ -29,6 +29,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoReports(prisma, existing.id);
     await seedDemoConsolidation(prisma, existing.id);
     await seedDemoFinance(prisma, existing.id);
+    await seedDemoOfferings(prisma, existing.id);
     return;
   }
 
@@ -72,6 +73,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoReports(prisma, account.id);
   await seedDemoConsolidation(prisma, account.id);
   await seedDemoFinance(prisma, account.id);
+  await seedDemoOfferings(prisma, account.id);
 }
 
 /**
@@ -281,6 +283,131 @@ async function seedDemoFinance(prisma: PrismaClient, accountId: number) {
   }
   console.log(`✔ ${rows.length} movimientos y ${transfers} transferencias de ejemplo en 3 cajas`);
 }
+
+/**
+ * Pendientes y arqueos de ejemplo: las ofrendas de célula de las últimas dos semanas quedan
+ * pendientes (las anteriores, confirmadas en la caja general), un arqueo confirmado de la reunión de
+ * oración del miércoles y un borrador del último domingo con billetes y sobres nominales. Idempotente.
+ */
+async function seedDemoOfferings(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.offeringCount.count({ where: { accountId } })) > 0) return;
+  const { addDays, dayOfWeek, todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const today = todayIn(account.timezone);
+  const cash = await prisma.financeAccount.findFirst({
+    where: { accountId, type: 'cash', currency: account.currency },
+    orderBy: { id: 'asc' },
+  });
+  if (!cash) return;
+  const categories = await prisma.financeCategory.findMany({ where: { accountId } });
+  const cat = (key: string) => categories.find((c) => c.systemKey === key)!.id;
+  const treasurer =
+    (await prisma.user.findFirst({ where: { accountId, email: 'demo-tesorero@shaddai.local' } })) ??
+    (await prisma.user.findFirstOrThrow({ where: { accountId } }));
+
+  const reports = await prisma.cellReport.findMany({
+    where: { accountId, offeringAmount: { gt: 0 }, financeMovements: { none: {} } },
+    orderBy: { meetingDate: 'asc' },
+  });
+  const recent = addDays(today, -14);
+  for (const r of reports) {
+    const pending = r.meetingDate.toISOString().slice(0, 10) >= recent;
+    await prisma.financeMovement.create({
+      data: {
+        accountId,
+        financeAccountId: pending ? null : cash.id,
+        categoryId: cat('offering'),
+        kind: 'income',
+        date: r.meetingDate,
+        amount: r.offeringAmount!,
+        paymentMethod: 'cash',
+        status: pending ? 'pending' : 'confirmed',
+        cellReportId: r.id,
+        createdById: r.submittedById,
+        ...(pending ? {} : { confirmedAt: eveningOf(r.meetingDate, 4), confirmedById: treasurer.id }),
+      },
+    });
+  }
+
+  const people = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, status: { systemKey: 'member' } },
+    orderBy: { id: 'asc' },
+    take: 12,
+  });
+  if (people.length < 4) return;
+  const [c1, c2, c3, c4] = people as [
+    (typeof people)[0],
+    (typeof people)[0],
+    (typeof people)[0],
+    (typeof people)[0],
+  ];
+  let wednesday = today;
+  while (dayOfWeek(wednesday) !== 3) wednesday = addDays(wednesday, -1);
+  let sunday = today;
+  while (dayOfWeek(sunday) !== 0) sunday = addDays(sunday, -1);
+
+  const confirmedLines = [
+    { categoryId: cat('offering'), paymentMethod: 'cash', denomination: 1000, quantity: 9, amount: 9000 },
+    { categoryId: cat('offering'), paymentMethod: 'cash', denomination: 500, quantity: 6, amount: 3000 },
+    { categoryId: cat('tithe'), paymentMethod: 'cash', amount: 18000, personId: c3.id },
+  ];
+  const confirmedAt = eveningOf(toDate(wednesday), 0);
+  const prayer = await prisma.offeringCount.create({
+    data: {
+      accountId,
+      financeAccountId: cash.id,
+      date: toDate(wednesday),
+      title: 'Reunión de oración (miércoles)',
+      counter1PersonId: c1.id,
+      counter2PersonId: c2.id,
+      status: 'confirmed',
+      createdById: treasurer.id,
+      confirmedAt,
+      confirmedById: treasurer.id,
+      lines: { create: confirmedLines.map((l, i) => ({ ...l, sortOrder: i })) },
+    },
+  });
+  await prisma.financeMovement.createMany({
+    data: [
+      { categoryId: cat('offering'), paymentMethod: 'cash', amount: 12000, personId: null },
+      { categoryId: cat('tithe'), paymentMethod: 'cash', amount: 18000, personId: c3.id },
+    ].map((m) => ({
+      ...m,
+      accountId,
+      financeAccountId: cash.id,
+      kind: 'income',
+      date: toDate(wednesday),
+      description: prayer.title,
+      offeringCountId: prayer.id,
+      createdById: treasurer.id,
+    })),
+  });
+
+  const draftLines = [
+    { categoryId: cat('offering'), paymentMethod: 'cash', denomination: 2000, quantity: 14, amount: 28000 },
+    { categoryId: cat('offering'), paymentMethod: 'cash', denomination: 1000, quantity: 23, amount: 23000 },
+    { categoryId: cat('offering'), paymentMethod: 'cash', denomination: 100, quantity: 37, amount: 3700 },
+    { categoryId: cat('offering'), paymentMethod: 'transfer', amount: 12500 },
+    { categoryId: cat('tithe'), paymentMethod: 'cash', amount: 35000, personId: c4.id },
+    { categoryId: cat('tithe'), paymentMethod: 'transfer', amount: 42000, personId: c3.id },
+  ];
+  await prisma.offeringCount.create({
+    data: {
+      accountId,
+      financeAccountId: cash.id,
+      date: toDate(sunday),
+      title: 'Culto domingo 18 h',
+      counter1PersonId: c2.id,
+      counter2PersonId: c4.id,
+      createdById: treasurer.id,
+      lines: { create: draftLines.map((l, i) => ({ ...l, sortOrder: i })) },
+    },
+  });
+  console.log(`✔ ${reports.length} ofrendas de célula (pendientes las recientes) y 2 arqueos de ejemplo`);
+}
+
+/** Las 19 h de Argentina (22 h UTC) del día + days: hora creíble para las fechas de confirmación. */
+const eveningOf = (d: Date, days: number) => new Date(d.getTime() + days * 86_400_000 + 22 * 3_600_000);
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
   if ((await prisma.consolidationCase.count({ where: { accountId } })) > 0) return;
