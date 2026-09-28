@@ -68,6 +68,7 @@
     "multer": "2.4.0",
     "nodemailer": "10.0.10",
     "otplib": "13.5.0",
+    "pdfmake": "0.3.11",
     "pino": "10.3.1",
     "pino-http": "11.0.0",
     "sharp": "0.35.4",
