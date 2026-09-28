@@ -1,16 +1,17 @@
 model Campus {
-  id        Int       @id @default(autoincrement())
-  accountId Int
-  account   Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  name      String    @db.NVarChar(100)
-  isMain    Boolean   @default(false)
-  address   String?   @db.NVarChar(250)
-  lat       Decimal?  @db.Decimal(9, 6)
-  lng       Decimal?  @db.Decimal(9, 6)
-  isActive  Boolean   @default(true)
-  people    Person[]
-  networks  Network[]
-  cells     Cell[]
+  id              Int              @id @default(autoincrement())
+  accountId       Int
+  account         Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name            String           @db.NVarChar(100)
+  isMain          Boolean          @default(false)
+  address         String?          @db.NVarChar(250)
+  lat             Decimal?         @db.Decimal(9, 6)
+  lng             Decimal?         @db.Decimal(9, 6)
+  isActive        Boolean          @default(true)
+  people          Person[]
+  networks        Network[]
+  cells           Cell[]
+  financeAccounts FinanceAccount[]
 
   @@index([accountId])
 }

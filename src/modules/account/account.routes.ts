@@ -201,6 +201,10 @@ t.get('/audit', 'auditoria.ver', async (req, res) => {
 // (comprobantes, reportes de célula) suma aquí su regla. Sin regla → 404.
 const FILE_ACCESS: Record<string, (req: Request, fileId: number) => Promise<boolean>> = {
   logo: async () => true,
+  // Comprobante: quien ve finanzas, si está adjunto a un movimiento de la cuenta.
+  receipt: async (req, fileId) =>
+    (await hasPermission(req, 'finanzas.ver')) &&
+    (await tenantDb().movementAttachment.count({ where: { fileId } })) > 0,
   // Foto de persona: solo si esa persona está en el alcance de personas.ver del usuario.
   photo: async (req, fileId) => {
     const person = await tenantDb().person.findFirst({

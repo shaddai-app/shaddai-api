@@ -1,0 +1,84 @@
+// Finanzas: libro de caja por cuenta (cajas, categorías, movimientos con comprobantes).
+// Nunca se borra un movimiento: se anula con motivo. Los montos son siempre positivos; el signo lo da
+// el tipo (income/transfer_in suman, expense/transfer_out restan).
+
+model FinanceAccount {
+  id                Int               @id @default(autoincrement())
+  accountId         Int
+  account           Account           @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId          Int?
+  campus            Campus?           @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name              String            @db.NVarChar(100)
+  type              String            @db.VarChar(6) // cash|bank|wallet
+  currency          String            @db.Char(3) // cada caja tiene su moneda (ARS, USD…); no se convierte
+  openingBalance    Decimal           @default(0) @db.Decimal(18, 2)
+  openingDate       DateTime          @db.Date
+  responsibleUserId Int?
+  responsible       User?             @relation(fields: [responsibleUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  movements         FinanceMovement[]
+
+  @@index([accountId])
+}
+
+model FinanceCategory {
+  id        Int               @id @default(autoincrement())
+  accountId Int
+  account   Account           @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  kind      String            @db.VarChar(7) // income|expense
+  systemKey String?           @db.VarChar(40) // tithe|offering|… (nombre traducido si name es null)
+  name      String?           @db.NVarChar(100)
+  sortOrder Int
+  isActive  Boolean           @default(true)
+  movements FinanceMovement[]
+
+  @@index([accountId, kind])
+}
+
+model FinanceMovement {
+  id               Int                  @id @default(autoincrement())
+  accountId        Int
+  account          Account              @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  financeAccountId Int
+  financeAccount   FinanceAccount       @relation(fields: [financeAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  categoryId       Int? // null en transferencias
+  category         FinanceCategory?     @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  kind             String               @db.VarChar(12) // income|expense|transfer_in|transfer_out
+  date             DateTime             @db.Date
+  amount           Decimal              @db.Decimal(18, 2) // siempre positivo
+  description      String?              @db.NVarChar(300)
+  personId         Int? // aportante (diezmo nominal): solo visible con finanzas.diezmos_nominales
+  person           Person?              @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isAnonymous      Boolean              @default(false)
+  paymentMethod    String?              @db.VarChar(10) // cash|transfer|card|wallet|other
+  reference        String?              @db.NVarChar(100)
+  status           String               @default("confirmed") @db.VarChar(10) // confirmed|voided (pending: tramo 2)
+  transferPairId   Int? // el otro movimiento de la transferencia (sin FK: evita ciclos en SQL Server)
+  voidedAt         DateTime?
+  voidedById       Int?
+  voidReason       String?              @db.NVarChar(300)
+  createdById      Int
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  attachments      MovementAttachment[]
+
+  @@index([accountId, date])
+  @@index([accountId, financeAccountId, date])
+  @@index([accountId, categoryId, date])
+  @@index([accountId, personId])
+  @@index([accountId, status])
+  @@index([transferPairId])
+}
+
+// Comprobantes (foto o PDF) de un movimiento.
+model MovementAttachment {
+  movementId Int
+  movement   FinanceMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  fileId     Int
+  file       FileObject      @relation(fields: [fileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt  DateTime        @default(now())
+
+  @@id([movementId, fileId])
+  @@index([fileId])
+}

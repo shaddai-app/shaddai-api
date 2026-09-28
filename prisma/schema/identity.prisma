@@ -30,6 +30,7 @@ model User {
 
   roles               UserRole[]
   consolidationCases  ConsolidationCase[]
+  financeAccounts     FinanceAccount[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
 

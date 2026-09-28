@@ -5,6 +5,7 @@ import { currentAccountId, tenantDb } from '../../core/db/tenant.js';
 import { distanceKm } from '../../core/geocoding/geocoding.js';
 import { AppError } from '../../core/http/errors.js';
 import { PaginationQuery, paged, toSkipTake } from '../../core/http/pagination.js';
+import { toDate, todayIn } from '../../core/time/local-date.js';
 import type { PermissionKey } from '../../core/rbac/catalog.js';
 import { dateOnly } from '../people/people.schemas.js';
 import { fold, isoDate } from '../people/people.service.js';
@@ -263,9 +264,10 @@ export async function createCell(viewer: Viewer, input: z.infer<typeof CreateCel
     'celulas.crear',
   );
   const db = tenantDb();
+  const today = await todayDate();
   const cell = await db.$transaction(async (tx) => {
     const created = await tx.cell.create({
-      data: { ...input, accountId: currentAccountId(), startedAt: input.startedAt ?? todayDate() },
+      data: { ...input, accountId: currentAccountId(), startedAt: input.startedAt ?? today },
       select: { id: true },
     });
     // El líder (y colíder/anfitrión) quedan como integrantes de su célula.
@@ -276,7 +278,7 @@ export async function createCell(viewer: Viewer, input: z.infer<typeof CreateCel
       const active = await tx.cellMember.findFirst({ where: { personId, leftAt: null } });
       if (!active) {
         await tx.cellMember.create({
-          data: { accountId: currentAccountId(), cellId: created.id, personId, joinedAt: todayDate() },
+          data: { accountId: currentAccountId(), cellId: created.id, personId, joinedAt: today },
         });
       }
     }
@@ -291,7 +293,14 @@ export async function createCell(viewer: Viewer, input: z.infer<typeof CreateCel
   return getCell(viewer, cell.id);
 }
 
-export const todayDate = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+/** Hoy en la zona horaria de la cuenta, como fecha pura (en UTC el día puede haber cambiado ya). */
+export async function todayDate() {
+  const { timezone } = await tenantDb().account.findUniqueOrThrow({
+    where: { id: currentAccountId() },
+    select: { timezone: true },
+  });
+  return toDate(todayIn(timezone));
+}
 
 export async function updateCell(viewer: Viewer, id: number, input: z.infer<typeof UpdateCellSchema>) {
   if (!(await inScope(viewer, 'celulas.ver', id))) throw AppError.notFound('CELL_NOT_FOUND');
@@ -315,17 +324,18 @@ export async function updateCell(viewer: Viewer, id: number, input: z.infer<type
     if (input.status !== 'active') throw AppError.conflict('CELL_CLOSED');
   }
   const closing = input.status === 'closed' && before.status !== 'closed';
+  const today = await todayDate();
   await db.$transaction(async (tx) => {
     await tx.cell.update({
       where: { id },
       data: {
         ...input,
-        ...(closing ? { closedAt: todayDate() } : {}),
+        ...(closing ? { closedAt: today } : {}),
         ...(input.status === 'active' ? { closedAt: null } : {}),
       },
     });
     if (closing)
-      await tx.cellMember.updateMany({ where: { cellId: id, leftAt: null }, data: { leftAt: todayDate() } });
+      await tx.cellMember.updateMany({ where: { cellId: id, leftAt: null }, data: { leftAt: today } });
   });
   await audit({
     action: closing ? 'cells.close' : 'cells.update',
@@ -356,10 +366,11 @@ export async function addMember(viewer: Viewer, cellId: number, personId: number
   if (current && !move) {
     throw AppError.conflict('PERSON_IN_OTHER_CELL', { cellId: current.cell.id, cellName: current.cell.name });
   }
+  const today = await todayDate();
   await db.$transaction(async (tx) => {
-    if (current) await tx.cellMember.update({ where: { id: current.id }, data: { leftAt: todayDate() } });
+    if (current) await tx.cellMember.update({ where: { id: current.id }, data: { leftAt: today } });
     await tx.cellMember.create({
-      data: { accountId: currentAccountId(), cellId, personId, joinedAt: todayDate() },
+      data: { accountId: currentAccountId(), cellId, personId, joinedAt: today },
     });
   });
   await audit({
@@ -379,7 +390,7 @@ export async function removeMember(viewer: Viewer, cellId: number, personId: num
   if (cell.leaderPersonId === personId) throw AppError.conflict('CELL_LEADER_REQUIRED');
   const { count } = await db.cellMember.updateMany({
     where: { cellId, personId, leftAt: null },
-    data: { leftAt: todayDate() },
+    data: { leftAt: await todayDate() },
   });
   if (count === 0) throw AppError.notFound('MEMBER_NOT_FOUND');
   await audit({ action: 'cells.member.remove', entity: 'Cell', entityId: cellId, after: { personId } });

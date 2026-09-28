@@ -3,6 +3,8 @@ import { PERMISSIONS, type PermissionScope } from '../../core/rbac/catalog.js';
 import { ADMIN_ROLE_KEY } from '../../core/rbac/resolve.js';
 import { DEFAULT_ROLES } from '../../core/rbac/default-roles.js';
 import { DEFAULT_STEPS } from '../consolidation/consolidation.service.js';
+import { CATEGORY_KINDS, DEFAULT_CATEGORIES } from '../finance/finance.service.js';
+import { toDate, todayIn } from '../../core/time/local-date.js';
 
 type Locale = 'es' | 'en' | 'pt';
 type Tx = Prisma.TransactionClient;
@@ -20,6 +22,12 @@ const MAIN_CAMPUS_NAME: Record<Locale, string> = {
   es: 'Sede principal',
   en: 'Main campus',
   pt: 'Sede principal',
+};
+
+const MAIN_CASH_NAME: Record<Locale, string> = {
+  es: 'Caja general',
+  en: 'General cash',
+  pt: 'Caixa geral',
 };
 
 const supportsScope = new Map(PERMISSIONS.map((p) => [p.key, p.supportsScope]));
@@ -74,6 +82,31 @@ export async function applyAccountTemplate(
       dueDays,
       sortOrder: (i + 1) * 10,
     })),
+  });
+
+  // Finanzas: categorías por defecto y una caja en la moneda de la iglesia, abierta hoy en saldo 0.
+  await tx.financeCategory.createMany({
+    data: CATEGORY_KINDS.flatMap((kind) =>
+      DEFAULT_CATEGORIES[kind].map((systemKey, i) => ({
+        accountId,
+        kind,
+        systemKey,
+        sortOrder: (i + 1) * 10,
+      })),
+    ),
+  });
+  const { currency, timezone } = await tx.account.findUniqueOrThrow({
+    where: { id: accountId },
+    select: { currency: true, timezone: true },
+  });
+  await tx.financeAccount.create({
+    data: {
+      accountId,
+      name: MAIN_CASH_NAME[locale],
+      type: 'cash',
+      currency,
+      openingDate: toDate(todayIn(timezone)),
+    },
   });
 
   return { adminRoleId };
