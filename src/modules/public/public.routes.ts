@@ -11,6 +11,8 @@ import { verifyTurnstile } from '../../core/security/turnstile.js';
 import { storage } from '../../core/storage/storage.js';
 import { CONSENT_VERSION, dateOnly } from '../people/people.schemas.js';
 import { normalizePhone } from '../people/people.service.js';
+import { createRegistration, publicEvent } from '../calendar/registrations.service.js';
+import { runInContext } from '../../core/context.js';
 
 /** Endpoints sin sesión. Nunca revelan si una iglesia existe pero está suspendida. */
 export const publicRouter = Router();
@@ -142,4 +144,73 @@ publicRouter.post('/public/:slug/newcomer', publicFormLimiter, async (req, res) 
     userId: null,
   });
   res.status(201).json({ ok: true });
+});
+
+// ───────────── Inscripción pública a eventos ─────────────
+
+const EventParams = SlugParam.extend({ id: z.coerce.number().int().positive() });
+
+const PublicRegistrationSchema = z
+  .object({
+    occurrence: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+    name: z.string().trim().min(2).max(150),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .transform((v) => (v === '' ? null : v))
+      .pipe(z.email().max(150).nullable())
+      .nullable()
+      .optional(),
+    phone: optional(30),
+    notes: optional(500),
+    turnstileToken: z.string().max(2048).optional(),
+    /** Trampa para bots. */
+    website: z.string().max(200).optional(),
+  })
+  .strict()
+  .refine((d) => Boolean(d.phone || d.email), { message: 'CONTACT_REQUIRED', path: ['phone'] });
+
+/** Corre el servicio del calendario con la cuenta de la iglesia (no hay sesión). */
+const asChurch = <T>(req: Request, accountId: number, fn: () => Promise<T>) =>
+  runInContext({ requestId: String(req.id), ip: req.ip, accountId }, fn);
+
+publicRouter.get('/public/:slug/events/:id', publicReadLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { id } = parse(EventParams, req.params);
+  const event = await asChurch(req, account.id, () => publicEvent(id));
+  const { currency } = await prisma.account.findUniqueOrThrow({
+    where: { id: account.id },
+    select: { currency: true },
+  });
+  res.json({
+    church: {
+      name: account.name,
+      slug: account.slug,
+      logoUrl: account.logoFileId ? `/api/v1/public/${account.slug}/logo` : null,
+      defaultLocale: account.defaultLocale,
+      primaryColor: account.primaryColor,
+      currency,
+    },
+    event,
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? null,
+  });
+});
+
+publicRouter.post('/public/:slug/events/:id/register', publicFormLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { id } = parse(EventParams, req.params);
+  const input = parse(PublicRegistrationSchema, req.body);
+  // Bot: se responde como si hubiera salido bien.
+  if (input.website) {
+    res.status(201).json({ status: 'confirmed' });
+    return;
+  }
+  if (!(await verifyTurnstile(input.turnstileToken, req.ip))) throw AppError.badRequest('CAPTCHA_FAILED');
+  const { turnstileToken: _t, website: _w, ...data } = input;
+  const registration = await asChurch(req, account.id, () =>
+    createRegistration(null, id, { ...data, personId: null }, 'public'),
+  );
+  // Solo lo necesario: no se devuelven datos de otros inscriptos.
+  res.status(201).json({ status: registration.status });
 });

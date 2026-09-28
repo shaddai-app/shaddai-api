@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { writeXlsx } from '../../core/excel/spreadsheet.js';
 import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as calendar from './calendar.service.js';
+import * as registrations from './registrations.service.js';
 
 const t = tenantRouter();
 export const calendarRouter = t.router;
@@ -55,3 +57,62 @@ t.delete('/events/:id/exceptions', 'eventos.gestionar', async (req, res) => {
   );
   res.json(await calendar.clearException(id, originalStart));
 });
+
+// ───────────── Inscripciones ─────────────
+
+t.get('/events/:id/registrations', 'eventos.inscripciones', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const { occurrence, format } = parse(
+    registrations.OccurrenceQuery.extend({ format: z.enum(['json', 'xlsx']).default('json') }),
+    req.query,
+  );
+  const data = await registrations.listRegistrations(id, occurrence);
+  if (format === 'json') {
+    res.json(data);
+    return;
+  }
+  const { locale } = parse(z.object({ locale: z.enum(['es', 'en', 'pt']).default('es') }), req.query);
+  const headers = REGISTRATION_HEADERS[locale];
+  const status = STATUS_LABELS[locale];
+  const rows = data.items.map((r) => [
+    r.name,
+    r.email,
+    r.phone,
+    status[r.status as keyof typeof status] ?? r.status,
+    r.paidAmount,
+    r.notes,
+  ]);
+  res
+    .attachment(`inscriptos-${id}-${occurrence.slice(0, 10)}.xlsx`)
+    .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(await writeXlsx(data.event.title, headers, rows));
+});
+
+t.post('/events/:id/registrations', 'eventos.inscripciones', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(registrations.RegistrationSchema, req.body);
+  res.status(201).json(await registrations.createRegistration(await viewerOf(req), id, input));
+});
+
+t.post('/registrations/:id/cancel', 'eventos.inscripciones', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await registrations.cancelRegistration(id));
+});
+
+/** Pago manual: además pide finanzas.registrar (lo valida el servicio). */
+t.post('/registrations/:id/payment', 'eventos.inscripciones', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(registrations.PaymentSchema, req.body);
+  res.status(201).json(await registrations.registerPayment(await viewerOf(req), id, input));
+});
+
+const REGISTRATION_HEADERS = {
+  es: ['Nombre', 'Email', 'Teléfono', 'Estado', 'Pagó', 'Notas'],
+  en: ['Name', 'Email', 'Phone', 'Status', 'Paid', 'Notes'],
+  pt: ['Nome', 'Email', 'Telefone', 'Situação', 'Pagou', 'Observações'],
+};
+const STATUS_LABELS = {
+  es: { confirmed: 'Confirmado', waitlist: 'Lista de espera', cancelled: 'Cancelado' },
+  en: { confirmed: 'Confirmed', waitlist: 'Waitlist', cancelled: 'Cancelled' },
+  pt: { confirmed: 'Confirmado', waitlist: 'Lista de espera', cancelled: 'Cancelado' },
+};

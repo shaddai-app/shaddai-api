@@ -78,6 +78,7 @@ model Person {
   countedOfferings1  OfferingCount[]        @relation("OfferingCounter1")
   countedOfferings2  OfferingCount[]        @relation("OfferingCounter2")
   offeringEnvelopes  OfferingCountLine[]
+  eventRegistrations EventRegistration[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])

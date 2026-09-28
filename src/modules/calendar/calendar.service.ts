@@ -7,6 +7,7 @@ import { dateToLocal, localToDate, nowLocalIn } from '../../core/time/local-date
 import { cellWhereFor } from '../cells/cells.service.js';
 import type { Viewer } from '../people/people.scope.js';
 import { endBefore, fromRule, isOccurrence, occurrences, Recurrence, toRule } from './recurrence.js';
+import { promoteWaitlist, realignRegistrations } from './registrations.service.js';
 
 // ───────────── Constantes y esquemas ─────────────
 
@@ -40,6 +41,11 @@ const EventFields = z.object({
   allDay: z.boolean().default(false),
   campusId: z.number().int().positive().nullable().optional(),
   recurrence: Recurrence.nullable().optional(),
+  registrationEnabled: z.boolean().optional(),
+  capacity: z.number().int().min(1).max(100_000).nullable().optional(),
+  waitlistEnabled: z.boolean().optional(),
+  price: z.number().min(0).max(999_999_999).nullable().optional(),
+  isPublic: z.boolean().optional(),
 });
 
 export const CreateEventSchema = EventFields.strict();
@@ -92,6 +98,39 @@ async function assertCampus(campusId: number | null | undefined) {
   }
 }
 
+type RegistrationInput = {
+  registrationEnabled?: boolean;
+  capacity?: number | null;
+  waitlistEnabled?: boolean;
+  price?: number | null;
+  isPublic?: boolean;
+};
+
+/**
+ * Opciones de inscripción: la lista de espera necesita cupo y el enlace público necesita que la
+ * inscripción esté abierta. Sin `before` es un alta (valores por defecto).
+ */
+function registrationData(
+  input: RegistrationInput,
+  before?: {
+    registrationEnabled: boolean;
+    capacity: number | null;
+    waitlistEnabled: boolean;
+    price: unknown;
+    isPublic: boolean;
+  },
+) {
+  const enabled = input.registrationEnabled ?? before?.registrationEnabled ?? false;
+  const capacity = input.capacity !== undefined ? input.capacity : (before?.capacity ?? null);
+  const price = input.price !== undefined ? input.price : before?.price == null ? null : Number(before.price);
+  return {
+    registrationEnabled: enabled,
+    capacity,
+    waitlistEnabled: capacity !== null && (input.waitlistEnabled ?? before?.waitlistEnabled ?? false),
+    price,
+    isPublic: enabled && (input.isPublic ?? before?.isPublic ?? false),
+  };
+}
 function ruleOf(recurrence: Recurrence | null | undefined, startsAt: string) {
   if (!recurrence) return null;
   if (recurrence.until && recurrence.until < startsAt.slice(0, 10))
@@ -109,6 +148,11 @@ const eventSelect = {
   endsAt: true,
   allDay: true,
   rrule: true,
+  registrationEnabled: true,
+  capacity: true,
+  waitlistEnabled: true,
+  price: true,
+  isPublic: true,
   createdById: true,
   createdAt: true,
   updatedAt: true,
@@ -132,6 +176,8 @@ export interface Occurrence {
   endsAt: string;
   allDay: boolean;
   recurring: boolean;
+  /** Tiene inscripción abierta (los eventos que la habilitan). */
+  registration: boolean;
   /** Inicio original de la fecha (identifica la fecha dentro de la serie). */
   originalStart: string;
   cancelled: boolean;
@@ -151,6 +197,7 @@ function expand(e: EventRow, from: Date, to: Date): Occurrence[] {
     location: e.location,
     allDay: e.allDay,
     recurring: Boolean(e.rrule),
+    registration: e.registrationEnabled,
   };
   const overlaps = (s: Date, end: Date) => s <= to && end >= from;
   if (!e.rrule) {
@@ -229,6 +276,7 @@ async function cellMeetings(viewer: Viewer, from: Date, to: Date): Promise<Occur
         endsAt: dateToLocal(end),
         allDay: false,
         recurring: true,
+        registration: false,
         originalStart: dateToLocal(start),
         cancelled: false,
         moved: false,
@@ -291,9 +339,10 @@ export async function getEvent(id: number) {
     where: { id: e.createdById },
     select: { id: true, firstName: true, lastName: true },
   });
-  const { rrule, exceptions, startsAt, endsAt, ...rest } = e;
+  const { rrule, exceptions, startsAt, endsAt, price, ...rest } = e;
   return {
     ...rest,
+    price: price === null ? null : Number(price),
     startsAt: dateToLocal(startsAt),
     endsAt: dateToLocal(endsAt),
     recurrence: rrule ? fromRule(rrule) : null,
@@ -325,6 +374,7 @@ export async function createEvent(viewer: Viewer, input: z.infer<typeof CreateEv
       allDay: input.allDay,
       rrule,
       campusId: input.campusId ?? null,
+      ...registrationData(input),
       createdById: viewer.userId,
     },
     select: { id: true },
@@ -359,12 +409,24 @@ export async function updateEvent(id: number, input: z.infer<typeof UpdateEventS
   const stale = before.exceptions
     .filter((x) => !rrule || !isOccurrence(rrule, start, x.originalStart))
     .map((x) => x.originalStart);
-  const { recurrence: _r, startsAt: _s, endsAt: _e, ...fields } = input;
+  const {
+    recurrence: _r,
+    startsAt: _s,
+    endsAt: _e,
+    registrationEnabled: _re,
+    capacity: _c,
+    waitlistEnabled: _w,
+    price: _p,
+    isPublic: _ip,
+    ...fields
+  } = input;
+  const registration = registrationData(input, before);
   const db = tenantDb();
   await db.calendarEvent.update({
     where: { id },
     data: {
       ...fields,
+      ...registration,
       allDay,
       startsAt: start,
       endsAt: localToDate(range.endsAt),
@@ -379,6 +441,9 @@ export async function updateEvent(id: number, input: z.infer<typeof UpdateEventS
     before: { title: before.title, startsAt: dateToLocal(before.startsAt), rrule: before.rrule },
     after: { changed: Object.keys(input), removedExceptions: stale.length },
   });
+  // Las inscripciones siguen a su fecha si cambió el horario, y con más cupo sube la lista de espera.
+  await realignRegistrations(id, rrule, start, localToDate(range.endsAt));
+  await promoteWaitlist(id);
   return { ...(await getEvent(id)), removedExceptions: stale.length };
 }
 
@@ -427,6 +492,7 @@ export async function splitEvent(viewer: Viewer, id: number, input: z.infer<type
         allDay,
         rrule: newRule,
         campusId: input.campusId !== undefined ? input.campusId : (before.campus?.id ?? null),
+        ...registrationData(input, before),
         createdById: viewer.userId,
         // Escritura anidada: las excepciones son hijas del evento nuevo.
         exceptions: {
@@ -441,8 +507,14 @@ export async function splitEvent(viewer: Viewer, id: number, input: z.infer<type
       },
       select: { id: true },
     });
+    // Las inscripciones de las fechas que pasan al evento nuevo lo acompañan.
+    await tx.eventRegistration.updateMany({
+      where: { eventId: id, occurrenceStart: { gte: at } },
+      data: { eventId: created.id },
+    });
     return created.id;
   });
+  await realignRegistrations(createdId, newRule, newStart, localToDate(range.endsAt));
   await audit({
     action: 'calendar.event.split',
     entity: 'CalendarEvent',
