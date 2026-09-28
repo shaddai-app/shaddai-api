@@ -234,9 +234,13 @@ describe('semáforo de cumplimiento', () => {
 
   it('pendiente (amarillo) dentro de los días de tolerancia', async () => {
     const s = await setup();
-    // Célula que se reunió ayer: sin reporte todavía está "pending".
+    // Célula que se reunió ayer: sin reporte todavía está "pending". Empezó antes (si hoy es el
+    // primer día de la semana, "ayer" es la semana anterior, cuando una célula creada hoy no existía).
     const yesterday = addDays(today(), -1);
-    await prisma.cell.update({ where: { id: s.cellB.id }, data: { meetingDay: dayOfWeek(yesterday) } });
+    await prisma.cell.update({
+      where: { id: s.cellB.id },
+      data: { meetingDay: dayOfWeek(yesterday), startedAt: new Date(`${addDays(yesterday, -7)}T00:00:00Z`) },
+    });
     const res = await request(app)
       .get(api(`/cell-reports/compliance?week=${yesterday}`))
       .set(s.headers);
