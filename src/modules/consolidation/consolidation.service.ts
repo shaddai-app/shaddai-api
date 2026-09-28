@@ -136,7 +136,7 @@ function presentCard(row: CardRow, today: string) {
 // ───────────── Apertura y recálculo ─────────────
 
 /** El paso actual es el primer paso activo sin completar; si no queda ninguno, el caso se completa. */
-async function recompute(db: Db, caseId: number, today: string) {
+async function recompute(db: ReturnType<typeof tenantDb>, caseId: number, today: string) {
   const steps = await db.consolidationCaseStep.findMany({
     where: { caseId },
     include: { step: { select: { sortOrder: true, isActive: true } } },

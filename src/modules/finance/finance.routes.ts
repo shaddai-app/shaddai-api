@@ -9,6 +9,7 @@ import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as finance from './finance.service.js';
+import * as offerings from './offerings.service.js';
 
 const t = tenantRouter();
 export const financeRouter = t.router;
@@ -138,7 +139,9 @@ async function normalizeReceipt(file: Express.Multer.File) {
 async function editableMovement(id: number) {
   const movement = await tenantDb().financeMovement.findUnique({ where: { id }, select: { status: true } });
   if (!movement) throw AppError.notFound('MOVEMENT_NOT_FOUND');
-  if (movement.status === 'voided') throw AppError.conflict('MOVEMENT_VOIDED');
+  if (movement.status === 'voided' || movement.status === 'rejected') {
+    throw AppError.conflict('MOVEMENT_VOIDED');
+  }
 }
 
 t.post(
@@ -180,4 +183,63 @@ t.delete('/finance/movements/:id/attachments/:fileId', 'finanzas.registrar', asy
     before: { fileId },
   });
   res.status(204).end();
+});
+
+// ───────────── Pendientes (ofrendas de célula) ─────────────
+
+const Reason = z.object({ reason: z.string().trim().min(1).max(300) }).strict();
+
+t.get('/finance/pending', ['finanzas.ver', 'finanzas.confirmar_pendientes'], async (req, res) => {
+  res.json(await offerings.listPending(await viewerOf(req), parse(offerings.ListPendingQuery, req.query)));
+});
+
+t.post('/finance/pending/:id/confirm', 'finanzas.confirmar_pendientes', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(offerings.ConfirmPendingSchema, req.body);
+  res.json(await offerings.confirmPending(await viewerOf(req), id, input));
+});
+
+t.post('/finance/pending/:id/reject', 'finanzas.confirmar_pendientes', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const { reason } = parse(Reason, req.body);
+  res.json(await offerings.rejectPending(await viewerOf(req), id, reason));
+});
+
+// ───────────── Arqueos ─────────────
+
+t.get('/finance/offering-counts', ['finanzas.ver', 'finanzas.arqueo'], async (req, res) => {
+  res.json(await offerings.listCounts(parse(offerings.ListCountsQuery, req.query)));
+});
+
+t.get('/finance/offering-counts/:id', ['finanzas.ver', 'finanzas.arqueo'], async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await offerings.getCount(await viewerOf(req), id));
+});
+
+t.post('/finance/offering-counts', 'finanzas.arqueo', async (req, res) => {
+  const input = parse(offerings.CreateCountSchema, req.body);
+  res.status(201).json(await offerings.createCount(await viewerOf(req), input));
+});
+
+t.patch('/finance/offering-counts/:id', 'finanzas.arqueo', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(offerings.UpdateCountSchema, req.body);
+  res.json(await offerings.updateCount(await viewerOf(req), id, input));
+});
+
+t.delete('/finance/offering-counts/:id', 'finanzas.arqueo', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  await offerings.deleteCount(id);
+  res.status(204).end();
+});
+
+t.post('/finance/offering-counts/:id/confirm', 'finanzas.arqueo', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await offerings.confirmCount(await viewerOf(req), id));
+});
+
+t.post('/finance/offering-counts/:id/void', 'finanzas.anular', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const { reason } = parse(Reason, req.body);
+  res.json(await offerings.voidCount(await viewerOf(req), id, reason));
 });

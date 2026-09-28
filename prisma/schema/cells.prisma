@@ -105,12 +105,13 @@ model CellReport {
   // Visitas sin ficha (se cuentan pero no se registran) + las registradas en attendance con isVisitor.
   anonymousVisitors Int                    @default(0)
   childrenCount     Int                    @default(0)
-  offeringAmount    Decimal?               @db.Decimal(18, 2) // Fase 4: genera un movimiento pendiente en finanzas
+  offeringAmount    Decimal?               @db.Decimal(18, 2) // genera un movimiento pendiente en finanzas
   notes             String?                @db.NVarChar(1000)
   submittedById     Int
   submittedAt       DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   attendance        CellReportAttendance[]
+  financeMovements  FinanceMovement[]
 
   @@unique([cellId, meetingDate])
   @@index([accountId, meetingDate])
