@@ -1,0 +1,44 @@
+// Calendario: eventos únicos o recurrentes (RRULE) con excepciones por fecha.
+//
+// Horarios en HORA LOCAL de la iglesia: startsAt/endsAt guardan la hora "de reloj" (un culto de
+// los domingos a las 10 queda 10:00 siempre, aunque haya horario de verano). Se guardan como
+// DateTime sin zona (se leen con getUTC*) y la API los devuelve como "YYYY-MM-DDTHH:mm".
+
+model CalendarEvent {
+  id          Int              @id @default(autoincrement())
+  accountId   Int
+  account     Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId    Int?
+  campus      Campus?          @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type        String           @db.VarChar(10) // service|meeting|special|other
+  title       String           @db.NVarChar(150)
+  description String?          @db.NVarChar(2000)
+  location    String?          @db.NVarChar(250)
+  startsAt    DateTime // hora local (primera fecha de la serie)
+  endsAt      DateTime // hora local; en los recurrentes define la duración de cada fecha
+  allDay      Boolean          @default(false)
+  rrule       String?          @db.VarChar(500) // solo la regla (FREQ=WEEKLY;BYDAY=SU;UNTIL=…), sin DTSTART
+  createdById Int
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  exceptions  EventException[]
+
+  @@index([accountId, startsAt])
+  @@index([accountId, type])
+}
+
+// Cambio a una sola fecha de una serie: cancelada (ej. feriado) o movida de horario.
+model EventException {
+  id            Int           @id @default(autoincrement())
+  eventId       Int
+  event         CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  originalStart DateTime // hora local de la fecha que se cambia
+  cancelled     Boolean       @default(false)
+  newStartsAt   DateTime?
+  newEndsAt     DateTime?
+  note          String?       @db.NVarChar(200)
+
+  @@unique([eventId, originalStart])
+  @@index([eventId, newStartsAt])
+}

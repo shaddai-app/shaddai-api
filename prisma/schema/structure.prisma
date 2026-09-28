@@ -12,6 +12,7 @@ model Campus {
   networks        Network[]
   cells           Cell[]
   financeAccounts FinanceAccount[]
+  calendarEvents  CalendarEvent[]
 
   @@index([accountId])
 }

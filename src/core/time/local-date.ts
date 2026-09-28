@@ -39,3 +39,22 @@ export function meetingDateInWeek(weekStartIso: string, weekStartsOn: number, me
 /** Diferencia en días (b − a). */
 export const daysBetween = (a: string, b: string) =>
   Math.round((toDate(b).getTime() - toDate(a).getTime()) / 86_400_000);
+
+/** Ahora en la zona horaria dada, como hora "de reloj" "YYYY-MM-DDTHH:mm". */
+export function nowLocalIn(timeZone: string, now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+/** Hora local "YYYY-MM-DDTHH:mm" ↔ Date sin zona (se guarda y se lee en UTC, sin conversión). */
+export const localToDate = (local: string) => new Date(`${local}:00Z`);
+export const dateToLocal = (d: Date) => d.toISOString().slice(0, 16);

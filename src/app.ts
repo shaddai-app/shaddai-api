@@ -19,6 +19,7 @@ import { cellsRouter } from './modules/cells/cells.routes.js';
 import { cellReportsRouter } from './modules/cells/reports.routes.js';
 import { cellStructureRouter } from './modules/cells/structure.routes.js';
 import { consolidationRouter } from './modules/consolidation/consolidation.routes.js';
+import { calendarRouter } from './modules/calendar/calendar.routes.js';
 import { financeRouter } from './modules/finance/finance.routes.js';
 import { financeReportsRouter } from './modules/finance/reports/reports.routes.js';
 import { householdsRouter } from './modules/people/households.routes.js';
@@ -97,6 +98,7 @@ export function createApp() {
   api.use(consolidationRouter);
   api.use(financeRouter);
   api.use(financeReportsRouter);
+  api.use(calendarRouter);
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);
