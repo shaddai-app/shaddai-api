@@ -41,6 +41,7 @@ export const TENANT_MODELS = new Set([
   'FinanceCategory',
   'FinanceMovement',
   'OfferingCount',
+  'FinancePeriod',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -61,6 +62,10 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   OfferingCountLine: {
     count: { fk: 'countId', parent: 'OfferingCount' },
     category: { fk: 'categoryId', parent: 'FinanceCategory' },
+  },
+  FinancePeriodBalance: {
+    period: { fk: 'periodId', parent: 'FinancePeriod' },
+    financeAccount: { fk: 'financeAccountId', parent: 'FinanceAccount' },
   },
   CellReportAttendance: {
     report: { fk: 'reportId', parent: 'CellReport' },

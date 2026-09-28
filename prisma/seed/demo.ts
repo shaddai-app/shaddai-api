@@ -30,6 +30,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoConsolidation(prisma, existing.id);
     await seedDemoFinance(prisma, existing.id);
     await seedDemoOfferings(prisma, existing.id);
+    await seedDemoPeriods(prisma, existing.id);
     return;
   }
 
@@ -74,6 +75,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoConsolidation(prisma, account.id);
   await seedDemoFinance(prisma, account.id);
   await seedDemoOfferings(prisma, account.id);
+  await seedDemoPeriods(prisma, account.id);
 }
 
 /**
@@ -408,6 +410,27 @@ async function seedDemoOfferings(prisma: PrismaClient, accountId: number) {
 
 /** Las 19 h de Argentina (22 h UTC) del día + days: hora creíble para las fechas de confirmación. */
 const eveningOf = (d: Date, days: number) => new Date(d.getTime() + days * 86_400_000 + 22 * 3_600_000);
+
+/**
+ * Cierres de ejemplo: los meses viejos quedan cerrados y el anterior al actual abierto (para probar el
+ * cierre). Usa el mismo servicio que la API, con un contexto armado a mano. Idempotente.
+ */
+async function seedDemoPeriods(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.financePeriod.count({ where: { accountId } })) > 0) return;
+  const { runInContext } = await import('../../src/core/context.js');
+  const { closePeriod, listPeriods } = await import('../../src/modules/finance/periods.service.js');
+  const treasurer =
+    (await prisma.user.findFirst({ where: { accountId, email: 'demo-tesorero@shaddai.local' } })) ??
+    (await prisma.user.findFirstOrThrow({ where: { accountId } }));
+  const viewer = { userId: treasurer.id } as Parameters<typeof closePeriod>[0];
+  const closed = await runInContext({ requestId: 'seed', userId: treasurer.id, accountId }, async () => {
+    // Del más viejo al más nuevo, dejando abiertos el mes actual y el anterior.
+    const months = (await listPeriods()).items.slice(2).reverse();
+    for (const m of months) await closePeriod(viewer, m, null);
+    return months.length;
+  });
+  console.log(`✔ ${closed} meses cerrados de ejemplo`);
+}
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
   if ((await prisma.consolidationCase.count({ where: { accountId } })) > 0) return;

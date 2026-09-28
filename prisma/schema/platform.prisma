@@ -64,6 +64,7 @@ model Account {
   financeCategories   FinanceCategory[]
   financeMovements    FinanceMovement[]
   offeringCounts      OfferingCount[]
+  financePeriods      FinancePeriod[]
 
   @@index([status])
 }

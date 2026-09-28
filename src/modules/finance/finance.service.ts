@@ -8,6 +8,7 @@ import { toDate, todayIn } from '../../core/time/local-date.js';
 import { fold, isoDate } from '../people/people.service.js';
 import { scopeOf, type Viewer } from '../people/people.scope.js';
 import { amount, INFLOW, present, signedAmount, toMoney, ZERO, type Money } from './money.js';
+import { assertPeriodOpen, lastClosedDay } from './period-lock.js';
 
 // ───────────── Constantes ─────────────
 
@@ -243,6 +244,15 @@ async function getAccount(id: number) {
   return presentAccount(row, (await balances([id])).get(id));
 }
 
+/**
+ * El saldo inicial cuenta en todos los meses desde la apertura: no se crea una caja ni se cambia su
+ * apertura dentro de un período ya cerrado (cambiaría saldos cerrados).
+ */
+async function assertOpeningEditable(...dates: (string | undefined)[]) {
+  const last = await lastClosedDay();
+  const first = dates.filter((d): d is string => Boolean(d)).sort()[0];
+  if (last && first && first <= last) throw AppError.conflict('PERIOD_CLOSED', { until: last });
+}
 async function assertAccountRefs(input: { campusId?: number | null; responsibleUserId?: number | null }) {
   const db = tenantDb();
   if (input.campusId && !(await db.campus.count({ where: { id: input.campusId } }))) {
@@ -265,6 +275,7 @@ export async function createAccount(input: z.infer<typeof AccountInput> & { name
     select: { currency: true },
   });
   const openingDate = input.openingDate ?? today;
+  await assertOpeningEditable(openingDate);
   if (openingDate > today) throw AppError.badRequest('DATE_IN_FUTURE');
   const created = await db.financeAccount.create({
     data: {
@@ -303,6 +314,10 @@ export async function updateAccount(id: number, input: z.infer<typeof AccountInp
   if (input.currency && input.currency !== before.currency && movements._count > 0) {
     throw AppError.conflict('FINANCE_CURRENCY_LOCKED');
   }
+  const openingChanged =
+    (input.openingBalance !== undefined && !toMoney(input.openingBalance).equals(before.openingBalance)) ||
+    (input.openingDate !== undefined && input.openingDate !== isoDate(before.openingDate));
+  if (openingChanged) await assertOpeningEditable(isoDate(before.openingDate)!, input.openingDate);
   if (input.openingDate) {
     if (input.openingDate > (await accountToday())) throw AppError.badRequest('DATE_IN_FUTURE');
     const first = isoDate(movements._min.date);
@@ -581,6 +596,7 @@ function assertOwnMovement(m: { status: string; offeringCountId: number | null }
 
 export async function createMovement(viewer: Viewer, input: z.infer<typeof CreateMovementSchema>) {
   await assertDate(input.date);
+  await assertPeriodOpen(input.date);
   await usableAccount(input.financeAccountId, input.date);
   await usableCategory(input.categoryId, input.kind);
   await assertContributor(viewer, input.personId);
@@ -628,6 +644,7 @@ export async function updateMovement(
   if (before.transferPairId) throw AppError.conflict('TRANSFER_EDIT_FORBIDDEN');
   const date = input.date ?? isoDate(before.date)!;
   if (input.date) await assertDate(input.date);
+  await assertPeriodOpen(isoDate(before.date), input.date);
   const currentAccount = before.financeAccountId!; // confirmado: siempre tiene caja
   const targetAccount = input.financeAccountId ?? currentAccount;
   if (input.financeAccountId || input.date) {
@@ -670,6 +687,7 @@ export async function voidMovement(viewer: Viewer, id: number, reason: string) {
   const movement = await db.financeMovement.findUnique({ where: { id } });
   if (!movement) throw AppError.notFound('MOVEMENT_NOT_FOUND');
   assertOwnMovement(movement);
+  await assertPeriodOpen(isoDate(movement.date));
   // Anular una transferencia anula las dos patas.
   const ids = movement.transferPairId ? [id, movement.transferPairId] : [id];
   await db.financeMovement.updateMany({
@@ -689,6 +707,7 @@ export async function voidMovement(viewer: Viewer, id: number, reason: string) {
 export async function createTransfer(viewer: Viewer, input: z.infer<typeof TransferSchema>) {
   if (input.fromAccountId === input.toAccountId) throw AppError.badRequest('TRANSFER_SAME_ACCOUNT');
   await assertDate(input.date);
+  await assertPeriodOpen(input.date);
   const from = await usableAccount(input.fromAccountId, input.date);
   const to = await usableAccount(input.toAccountId, input.date);
   if (from.currency !== to.currency) throw AppError.badRequest('TRANSFER_CURRENCY_MISMATCH');
@@ -747,6 +766,8 @@ export async function summary(viewer: Viewer) {
     month: { from: monthStart, to: today, totals: month },
     /** Ofrendas de célula por confirmar y arqueos en borrador (avisos del tablero). */
     pending: { movements: pending, counts: drafts },
+    /** Último día cerrado: antes de esa fecha no se carga ni se modifica nada. */
+    closedUntil: await lastClosedDay(),
     accounts,
     recent: recent.map((r) => presentMovement(r, viewer)),
   };
