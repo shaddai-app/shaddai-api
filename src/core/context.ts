@@ -27,3 +27,6 @@ export const contextMiddleware: RequestHandler = (req, _res, next) => {
     next,
   );
 };
+
+/** Corre fn con un contexto armado a mano (scripts como el seed, que no pasan por una request). */
+export const runInContext = <T>(ctx: RequestContext, fn: () => T): T => storage.run(ctx, fn);

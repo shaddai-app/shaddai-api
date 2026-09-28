@@ -10,6 +10,7 @@ import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as finance from './finance.service.js';
 import * as offerings from './offerings.service.js';
+import * as periods from './periods.service.js';
 
 const t = tenantRouter();
 export const financeRouter = t.router;
@@ -242,4 +243,26 @@ t.post('/finance/offering-counts/:id/void', 'finanzas.anular', async (req, res) 
   const { id } = parse(IdParam, req.params);
   const { reason } = parse(Reason, req.body);
   res.json(await offerings.voidCount(await viewerOf(req), id, reason));
+});
+
+// ───────────── Cierre mensual ─────────────
+
+t.get('/finance/periods', ['finanzas.ver', 'finanzas.cierre'], async (_req, res) => {
+  res.json(await periods.listPeriods());
+});
+
+t.get('/finance/periods/:year/:month', ['finanzas.ver', 'finanzas.cierre'], async (req, res) => {
+  res.json(await periods.getPeriod(parse(periods.PeriodParams, req.params)));
+});
+
+t.post('/finance/periods/:year/:month/close', 'finanzas.cierre', async (req, res) => {
+  const ym = parse(periods.PeriodParams, req.params);
+  const { notes } = parse(z.object({ notes: finance.optionalText(500) }).strict(), req.body ?? {});
+  res.json(await periods.closePeriod(await viewerOf(req), ym, notes ?? null));
+});
+
+t.post('/finance/periods/:year/:month/reopen', 'finanzas.reabrir_cierre', async (req, res) => {
+  const ym = parse(periods.PeriodParams, req.params);
+  const { reason } = parse(Reason, req.body);
+  res.json(await periods.reopenPeriod(await viewerOf(req), ym, reason));
 });

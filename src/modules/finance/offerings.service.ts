@@ -21,6 +21,7 @@ import {
   usableCategory,
 } from './finance.service.js';
 import { amount, Decimal, present, toMoney, ZERO, type Money } from './money.js';
+import { assertPeriodOpen } from './period-lock.js';
 
 // ═════════════ Ofrendas de célula (movimientos pendientes) ═════════════
 //
@@ -191,6 +192,7 @@ export async function confirmPending(
   const movement = await findPending(id);
   const date = input.date ?? isoDate(movement.date)!;
   await assertDate(date);
+  await assertPeriodOpen(date);
   const account = await usableAccount(input.financeAccountId, date);
   const { currency } = await tenantDb().account.findUniqueOrThrow({
     where: { id: currentAccountId() },
@@ -550,6 +552,7 @@ export async function confirmCount(viewer: Viewer, id: number) {
   });
   if (lines.length === 0) throw AppError.conflict('COUNT_EMPTY');
   const date = isoDate(count.date)!;
+  await assertPeriodOpen(date);
   // Se revalida: la caja o las categorías pueden haberse desactivado desde que se cargó el borrador.
   await usableAccount(count.financeAccountId, date);
   for (const categoryId of new Set(lines.map((l) => l.categoryId)))
@@ -614,6 +617,7 @@ export async function voidCount(viewer: Viewer, id: number, reason: string) {
   const count = await db.offeringCount.findUnique({ where: { id } });
   if (!count) throw AppError.notFound('COUNT_NOT_FOUND');
   if (count.status !== 'confirmed') throw AppError.conflict('COUNT_NOT_CONFIRMED');
+  await assertPeriodOpen(isoDate(count.date));
   const now = new Date();
   const voided = { voidedAt: now, voidedById: viewer.userId, voidReason: reason };
   await db.$transaction(async (tx) => {

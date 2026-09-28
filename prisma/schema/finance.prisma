@@ -3,22 +3,23 @@
 // el tipo (income/transfer_in suman, expense/transfer_out restan).
 
 model FinanceAccount {
-  id                Int               @id @default(autoincrement())
+  id                Int                    @id @default(autoincrement())
   accountId         Int
-  account           Account           @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  account           Account                @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   campusId          Int?
-  campus            Campus?           @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  name              String            @db.NVarChar(100)
-  type              String            @db.VarChar(6) // cash|bank|wallet
-  currency          String            @db.Char(3) // cada caja tiene su moneda (ARS, USD…); no se convierte
-  openingBalance    Decimal           @default(0) @db.Decimal(18, 2)
-  openingDate       DateTime          @db.Date
+  campus            Campus?                @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name              String                 @db.NVarChar(100)
+  type              String                 @db.VarChar(6) // cash|bank|wallet
+  currency          String                 @db.Char(3) // cada caja tiene su moneda (ARS, USD…); no se convierte
+  openingBalance    Decimal                @default(0) @db.Decimal(18, 2)
+  openingDate       DateTime               @db.Date
   responsibleUserId Int?
-  responsible       User?             @relation(fields: [responsibleUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  isActive          Boolean           @default(true)
-  createdAt         DateTime          @default(now())
+  responsible       User?                  @relation(fields: [responsibleUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive          Boolean                @default(true)
+  createdAt         DateTime               @default(now())
   movements         FinanceMovement[]
   offeringCounts    OfferingCount[]
+  periodBalances    FinancePeriodBalance[]
 
   @@index([accountId])
 }
@@ -144,4 +145,42 @@ model OfferingCountLine {
 
   @@index([countId])
   @@index([personId])
+}
+
+// Cierre mensual: un mes cerrado no acepta altas, ediciones ni anulaciones con fecha en él. Al cerrar
+// se guarda la foto de los saldos de cada caja. Se cierra en orden y solo se reabre el último cerrado
+// (con permiso y motivo; queda auditado).
+model FinancePeriod {
+  id           Int                    @id @default(autoincrement())
+  accountId    Int
+  account      Account                @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  year         Int                    @db.SmallInt
+  month        Int                    @db.TinyInt
+  status       String                 @default("open") @db.VarChar(6) // open|closed
+  closedAt     DateTime?
+  closedById   Int?
+  notes        String?                @db.NVarChar(500)
+  reopenedAt   DateTime? // última reapertura
+  reopenedById Int?
+  reopenReason String?                @db.NVarChar(300)
+  balances     FinancePeriodBalance[]
+
+  @@unique([accountId, year, month])
+}
+
+// Saldos de una caja en un mes cerrado (se borran al reabrir y se recalculan al volver a cerrar).
+model FinancePeriodBalance {
+  periodId         Int
+  period           FinancePeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  financeAccountId Int
+  financeAccount   FinanceAccount @relation(fields: [financeAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  opening          Decimal        @db.Decimal(18, 2)
+  income           Decimal        @db.Decimal(18, 2)
+  expense          Decimal        @db.Decimal(18, 2)
+  transfersIn      Decimal        @db.Decimal(18, 2)
+  transfersOut     Decimal        @db.Decimal(18, 2)
+  closing          Decimal        @db.Decimal(18, 2)
+
+  @@id([periodId, financeAccountId])
+  @@index([financeAccountId])
 }
