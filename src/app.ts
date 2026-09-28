@@ -20,6 +20,7 @@ import { cellReportsRouter } from './modules/cells/reports.routes.js';
 import { cellStructureRouter } from './modules/cells/structure.routes.js';
 import { consolidationRouter } from './modules/consolidation/consolidation.routes.js';
 import { financeRouter } from './modules/finance/finance.routes.js';
+import { financeReportsRouter } from './modules/finance/reports/reports.routes.js';
 import { householdsRouter } from './modules/people/households.routes.js';
 import { newcomersRouter } from './modules/people/newcomers.routes.js';
 import { peopleIoRouter } from './modules/people/people.io.routes.js';
@@ -95,6 +96,7 @@ export function createApp() {
   api.use(cellsRouter);
   api.use(consolidationRouter);
   api.use(financeRouter);
+  api.use(financeReportsRouter);
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);
