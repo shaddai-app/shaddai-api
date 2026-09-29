@@ -71,6 +71,8 @@ model Account {
   ministries          Ministry[]
   ministryMembers     MinistryMember[]
   serviceRoles        ServiceRole[]
+  serviceAssignments  ServiceAssignment[]
+  unavailabilities    Unavailability[]
 
   @@index([status])
 }

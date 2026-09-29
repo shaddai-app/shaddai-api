@@ -4,6 +4,7 @@ import { audit } from '../../core/audit/audit.js';
 import { currentAccountId, tenantDb } from '../../core/db/tenant.js';
 import { AppError } from '../../core/http/errors.js';
 import type { PermissionKey } from '../../core/rbac/catalog.js';
+import { localToDate, nowLocalIn } from '../../core/time/local-date.js';
 import { todayDate } from '../cells/cells.service.js';
 import { isoDate } from '../people/people.service.js';
 import { scopeOf, type Viewer } from '../people/people.scope.js';
@@ -141,6 +142,15 @@ async function manageable(viewer: Viewer, id: number) {
   if (!(await ministryInScope(viewer, 'ministerios.gestionar', id))) {
     throw AppError.forbidden('MINISTRY_MANAGE_FORBIDDEN');
   }
+}
+
+/** Ahora en la hora local de la iglesia (como se guardan las fechas de los eventos). */
+export async function accountNow() {
+  const { timezone } = await tenantDb().account.findUniqueOrThrow({
+    where: { id: currentAccountId() },
+    select: { timezone: true },
+  });
+  return localToDate(nowLocalIn(timezone));
 }
 
 const managesAll = (viewer: Viewer) => scopeOf(viewer, 'ministerios.gestionar') === 'all';
@@ -366,12 +376,18 @@ export async function removeMember(viewer: Viewer, id: number, memberId: number)
   await manageable(viewer, id);
   const member = await activeMember(id, memberId);
   assertLeaderChange(viewer, member.role);
-  await tenantDb().ministryMember.update({ where: { id: memberId }, data: { leftAt: await todayDate() } });
+  const db = tenantDb();
+  await db.ministryMember.update({ where: { id: memberId }, data: { leftAt: await todayDate() } });
+  // Sus turnos futuros en este ministerio quedan sin efecto (los pasados son historial).
+  const { count: dropped } = await db.serviceAssignment.deleteMany({
+    where: { ministryId: id, personId: member.personId, occurrenceStart: { gte: await accountNow() } },
+  });
   await audit({
     action: 'ministries.member.remove',
     entity: 'Ministry',
     entityId: id,
     before: { personId: member.personId, role: member.role },
+    after: { droppedAssignments: dropped },
   });
   return getMinistry(viewer, id);
 }
@@ -442,6 +458,10 @@ export async function reorderRoles(viewer: Viewer, id: number, ids: number[]) {
 export async function deleteRole(viewer: Viewer, id: number, roleId: number) {
   await manageable(viewer, id);
   const role = await roleOf(id, roleId);
+  // Con turnos (aunque sean pasados) no se borra: se desactiva para conservar el historial.
+  if (await tenantDb().serviceAssignment.count({ where: { serviceRoleId: roleId } })) {
+    throw AppError.conflict('SERVICE_ROLE_IN_USE');
+  }
   await tenantDb().serviceRole.delete({ where: { id: roleId } });
   await audit({
     action: 'ministries.role.delete',

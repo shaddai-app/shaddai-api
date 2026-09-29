@@ -80,6 +80,8 @@ model Person {
   offeringEnvelopes   OfferingCountLine[]
   eventRegistrations  EventRegistration[]
   ministryMemberships MinistryMember[]
+  serviceAssignments  ServiceAssignment[]
+  unavailabilities    Unavailability[]
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])

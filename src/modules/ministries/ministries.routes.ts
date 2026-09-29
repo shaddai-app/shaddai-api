@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
+import * as assignments from './assignments.service.js';
 import * as ministries from './ministries.service.js';
 
 const t = tenantRouter();
@@ -81,4 +82,51 @@ t.patch('/ministries/:id/service-roles/:roleId', 'ministerios.gestionar', async 
 t.delete('/ministries/:id/service-roles/:roleId', 'ministerios.gestionar', async (req, res) => {
   const { id, roleId } = parse(RoleParam, req.params);
   res.json(await ministries.deleteRole(await viewerOf(req), id, roleId));
+});
+
+// ───────────── Turnos ─────────────
+
+const AssignmentParam = IdParam.extend({ assignmentId: z.coerce.number().int().positive() });
+
+t.get('/ministries/:id/schedule', 'ministerios.ver', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await assignments.schedule(await viewerOf(req), id, parse(assignments.ScheduleQuery, req.query)));
+});
+
+t.post('/ministries/:id/assignments', 'ministerios.turnos', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(assignments.AssignSchema, req.body);
+  res.status(201).json(await assignments.assign(await viewerOf(req), id, input));
+});
+
+t.delete('/ministries/:id/assignments/:assignmentId', 'ministerios.turnos', async (req, res) => {
+  const { id, assignmentId } = parse(AssignmentParam, req.params);
+  await assignments.unassign(await viewerOf(req), id, assignmentId);
+  res.status(204).end();
+});
+
+// ───────────── Mis turnos (cualquier usuario, sobre su propia ficha) ─────────────
+
+t.get('/me/assignments', 'account-user', async (req, res) => {
+  res.json(await assignments.myAssignments(await viewerOf(req)));
+});
+
+t.post('/me/assignments/:id/respond', 'account-user', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(assignments.RespondSchema, req.body);
+  res.json(await assignments.respond(await viewerOf(req), id, input));
+});
+
+t.get('/me/unavailability', 'account-user', async (req, res) => {
+  res.json(await assignments.myUnavailability(await viewerOf(req)));
+});
+
+t.post('/me/unavailability', 'account-user', async (req, res) => {
+  const input = parse(assignments.UnavailabilitySchema, req.body);
+  res.status(201).json(await assignments.addUnavailability(await viewerOf(req), input));
+});
+
+t.delete('/me/unavailability/:id', 'account-user', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await assignments.deleteUnavailability(await viewerOf(req), id));
 });

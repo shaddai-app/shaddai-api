@@ -48,6 +48,8 @@ export const TENANT_MODELS = new Set([
   'Ministry',
   'MinistryMember',
   'ServiceRole',
+  'ServiceAssignment',
+  'Unavailability',
 ]);
 
 /** relación -> { fk, modelo padre } */
