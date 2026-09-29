@@ -45,6 +45,9 @@ export const TENANT_MODELS = new Set([
   'CalendarEvent',
   'EventRegistration',
   'ServiceAttendance',
+  'Ministry',
+  'MinistryMember',
+  'ServiceRole',
 ]);
 
 /** relación -> { fk, modelo padre } */

@@ -1,0 +1,53 @@
+// Ministerios (alabanza, técnica, ujieres, niños…), sus integrantes y los puestos en los que sirven.
+// Los turnos (ServiceAssignment) usan los puestos (ServiceRole) de cada ministerio.
+
+model Ministry {
+  id          Int              @id @default(autoincrement())
+  accountId   Int
+  account     Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId    Int?
+  campus      Campus?          @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name        String           @db.NVarChar(100)
+  description String?          @db.NVarChar(500)
+  color       String?          @db.VarChar(20)
+  kind        String           @default("general") @db.VarChar(10) // general|worship|tech|kids|ushers
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  members     MinistryMember[]
+  roles       ServiceRole[]
+
+  @@index([accountId, isActive])
+}
+
+// Integración a un ministerio. Al salir se completa leftAt (se conserva el historial).
+model MinistryMember {
+  id         Int       @id @default(autoincrement())
+  accountId  Int
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ministryId Int
+  ministry   Ministry  @relation(fields: [ministryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId   Int
+  person     Person    @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role       String    @default("servant") @db.VarChar(10) // leader|coleader|servant
+  joinedAt   DateTime  @db.Date
+  leftAt     DateTime? @db.Date
+
+  @@index([accountId, ministryId, leftAt])
+  @@index([accountId, personId])
+}
+
+// Puesto dentro de un ministerio ("Guitarra", "Ujier puerta").
+model ServiceRole {
+  id         Int      @id @default(autoincrement())
+  accountId  Int
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ministryId Int
+  ministry   Ministry @relation(fields: [ministryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name       String   @db.NVarChar(80)
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+
+  @@index([accountId, ministryId])
+}
