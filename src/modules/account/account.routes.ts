@@ -205,6 +205,10 @@ const FILE_ACCESS: Record<string, (req: Request, fileId: number) => Promise<bool
   receipt: async (req, fileId) =>
     (await hasPermission(req, 'finanzas.ver')) &&
     (await tenantDb().movementAttachment.count({ where: { fileId } })) > 0,
+  // Foto de un equipo: quien ve el inventario, si el equipo sigue activo.
+  inventory: async (req, fileId) =>
+    (await hasPermission(req, 'inventario.ver')) &&
+    (await tenantDb().inventoryItem.count({ where: { photoFileId: fileId, deletedAt: null } })) > 0,
   // Foto de persona: solo si esa persona está en el alcance de personas.ver del usuario.
   photo: async (req, fileId) => {
     const person = await tenantDb().person.findFirst({

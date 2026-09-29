@@ -193,3 +193,6 @@ export async function renderXlsx(fmt: Fmt, church: string, sheets: XlsxSheet[]) 
   }
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
+
+/** PDF con un documento pdfmake armado a mano (mismas fuentes y políticas de acceso). */
+export const pdfBuffer = (doc: Record<string, unknown>) => pdfmake.createPdf(doc).getBuffer();

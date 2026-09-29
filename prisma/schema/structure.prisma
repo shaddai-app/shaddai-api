@@ -14,6 +14,7 @@ model Campus {
   financeAccounts FinanceAccount[]
   calendarEvents  CalendarEvent[]
   ministries      Ministry[]
+  inventoryItems  InventoryItem[]
 
   @@index([accountId])
 }
@@ -35,6 +36,7 @@ model CatalogItem {
   statusHistoryTo   PersonStatusHistory[] @relation("StatusHistoryTo")
   milestones        PersonMilestone[]     @relation("Milestone")
   positions         PersonPosition[]      @relation("Position")
+  inventoryItems    InventoryItem[]       @relation("InventoryCategory")
 
   @@index([accountId, type])
   // Unicidad de (accountId, type, systemKey) no nulo: la valida el servicio. Un índice filtrado manual
