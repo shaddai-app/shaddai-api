@@ -23,6 +23,8 @@ export async function resetDb() {
   await prisma.offeringCountLine.deleteMany();
   await prisma.offeringCount.deleteMany();
   await prisma.serviceAttendance.deleteMany();
+  await prisma.setlistItem.deleteMany();
+  await prisma.setlist.deleteMany();
   await prisma.songLink.deleteMany();
   await prisma.song.deleteMany();
   await prisma.serviceAssignment.deleteMany();

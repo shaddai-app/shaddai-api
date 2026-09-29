@@ -32,6 +32,7 @@ model CalendarEvent {
   registrations       EventRegistration[]
   attendances         ServiceAttendance[]
   serviceAssignments  ServiceAssignment[]
+  setlists            Setlist[]
 
   @@index([accountId, startsAt])
   @@index([accountId, type])

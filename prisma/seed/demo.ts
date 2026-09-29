@@ -37,6 +37,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoMinistries(prisma, existing.id);
     await seedDemoAssignments(prisma, existing.id);
     await seedDemoSongs(prisma, existing.id);
+    await seedDemoSetlists(prisma, existing.id);
     return;
   }
 
@@ -88,6 +89,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoMinistries(prisma, account.id);
   await seedDemoAssignments(prisma, account.id);
   await seedDemoSongs(prisma, account.id);
+  await seedDemoSetlists(prisma, account.id);
 }
 
 /**
@@ -827,6 +829,67 @@ async function seedDemoSongs(prisma: PrismaClient, accountId: number) {
     });
   }
   console.log(`✔ Canciones de ejemplo: ${songs.length}`);
+}
+
+/**
+ * Listas de canciones de ejemplo para el culto de la mañana: el domingo pasado (historial) y el
+ * próximo (con los músicos de los turnos). Idempotente.
+ */
+async function seedDemoSetlists(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.setlist.count({ where: { accountId } })) > 0) return;
+  const { addDays, dayOfWeek, todayIn } = await import('../../src/core/time/local-date.js');
+  const service = await prisma.calendarEvent.findFirst({
+    where: { accountId, title: 'Culto dominical', deletedAt: null },
+  });
+  const songs = await prisma.song.findMany({ where: { accountId, deletedAt: null }, orderBy: { id: 'asc' } });
+  if (!service || songs.length < 3) return;
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const today = todayIn(account.timezone);
+  let next = addDays(today, 1);
+  while (dayOfWeek(next) !== 0) next = addDays(next, 1);
+  const time = service.startsAt.toISOString().slice(11, 16);
+  const at = (day: string) => new Date(`${day}T${time}:00Z`);
+  const [grace, river, presence] = songs;
+  const lists = [
+    {
+      day: addDays(next, -7),
+      notes: null,
+      items: [
+        { songId: river!.id, key: 'D' },
+        { songId: grace!.id, key: 'A' },
+      ],
+    },
+    {
+      day: next,
+      notes: 'Santa cena al final: «En tu presencia» suave, solo teclado al comienzo.',
+      items: [
+        { songId: river!.id, key: 'E', notes: 'Arranca la batería' },
+        { songId: grace!.id, key: 'G' },
+        { songId: presence!.id, key: 'Am' },
+      ],
+    },
+  ];
+  for (const l of lists) {
+    await prisma.setlist.create({
+      data: {
+        accountId,
+        eventId: service.id,
+        occurrenceStart: at(l.day),
+        notes: l.notes,
+        status: 'published',
+        createdById: admin.id,
+        items: {
+          create: l.items.map((i, index) => ({
+            ...i,
+            notes: 'notes' in i ? i.notes : null,
+            position: index + 1,
+          })),
+        },
+      },
+    });
+  }
+  console.log('✔ Listas de canciones de ejemplo: domingo pasado y próximo');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
