@@ -67,6 +67,7 @@ model Account {
   financePeriods      FinancePeriod[]
   calendarEvents      CalendarEvent[]
   eventRegistrations  EventRegistration[]
+  serviceAttendances  ServiceAttendance[]
 
   @@index([status])
 }

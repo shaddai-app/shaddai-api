@@ -105,3 +105,16 @@ export function endBefore(rule: string, before: Date): string {
     .find((l) => l.startsWith('RRULE:'))!;
   return line.slice('RRULE:'.length);
 }
+
+/**
+ * Fecha de la serie a la que corresponde `at` después de un cambio de horario: la misma si sigue
+ * siendo una fecha de la serie, la del mismo día si cambió la hora, o null si ese día ya no hay.
+ * Sin regla, el evento es de una sola fecha (`start`).
+ */
+export function alignOccurrence(rule: string | null, start: Date, at: Date): Date | null {
+  const valid = rule ? isOccurrence(rule, start, at) : at.getTime() === start.getTime();
+  if (valid) return at;
+  const day = dateToLocal(at).slice(0, 10);
+  if (!rule) return dateToLocal(start).slice(0, 10) === day ? start : null;
+  return occurrences(rule, start, localToDate(`${day}T00:00`), localToDate(`${day}T23:59`))[0] ?? null;
+}
