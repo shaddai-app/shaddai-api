@@ -4,6 +4,7 @@ import {
   daysBetween,
   dayOfWeek,
   meetingDateInWeek,
+  startOfDayIn,
   todayIn,
   weekStart,
 } from '../../src/core/time/local-date.js';
@@ -34,5 +35,14 @@ describe('fechas locales de la cuenta', () => {
   it('suma y resta días cruzando meses', () => {
     expect(addDays('2026-09-28', 5)).toBe('2026-10-03');
     expect(daysBetween('2026-09-28', '2026-10-03')).toBe(5);
+  });
+
+  it('instante en que empieza un día local', () => {
+    expect(startOfDayIn('2026-09-28', 'America/Argentina/Buenos_Aires').toISOString()).toBe(
+      '2026-09-28T03:00:00.000Z',
+    );
+    expect(startOfDayIn('2026-09-28', 'UTC').toISOString()).toBe('2026-09-28T00:00:00.000Z');
+    // Madrid en verano (UTC+2).
+    expect(startOfDayIn('2026-07-01', 'Europe/Madrid').toISOString()).toBe('2026-06-30T22:00:00.000Z');
   });
 });

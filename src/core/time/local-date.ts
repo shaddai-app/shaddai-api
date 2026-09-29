@@ -55,6 +55,16 @@ export function nowLocalIn(timeZone: string, now = new Date()): string {
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
+/**
+ * Instante real en que empieza el día `iso` en la zona horaria dada (para filtrar columnas que
+ * guardan instantes, como createdAt, por días del calendario local).
+ */
+export function startOfDayIn(iso: string, timeZone: string): Date {
+  const guess = toDate(iso);
+  const offset = new Date(`${nowLocalIn(timeZone, guess)}:00Z`).getTime() - guess.getTime();
+  return new Date(guess.getTime() - offset);
+}
+
 /** Hora local "YYYY-MM-DDTHH:mm" ↔ Date sin zona (se guarda y se lee en UTC, sin conversión). */
 export const localToDate = (local: string) => new Date(`${local}:00Z`);
 export const dateToLocal = (d: Date) => d.toISOString().slice(0, 16);

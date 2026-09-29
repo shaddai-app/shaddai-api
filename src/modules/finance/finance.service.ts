@@ -491,7 +491,7 @@ function movementWhere(
 }
 
 /** Totales de ingresos y egresos del filtro, por moneda (las transferencias no son ingreso ni egreso). */
-async function totalsByCurrency(where: Prisma.FinanceMovementWhereInput) {
+export async function totalsByCurrency(where: Prisma.FinanceMovementWhereInput) {
   const db = tenantDb();
   const sums = (
     await db.financeMovement.groupBy({
