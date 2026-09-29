@@ -2,21 +2,22 @@
 // Los turnos (ServiceAssignment) usan los puestos (ServiceRole) de cada ministerio.
 
 model Ministry {
-  id          Int              @id @default(autoincrement())
+  id          Int                 @id @default(autoincrement())
   accountId   Int
-  account     Account          @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  account     Account             @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   campusId    Int?
-  campus      Campus?          @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  name        String           @db.NVarChar(100)
-  description String?          @db.NVarChar(500)
-  color       String?          @db.VarChar(20)
-  kind        String           @default("general") @db.VarChar(10) // general|worship|tech|kids|ushers
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  campus      Campus?             @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name        String              @db.NVarChar(100)
+  description String?             @db.NVarChar(500)
+  color       String?             @db.VarChar(20)
+  kind        String              @default("general") @db.VarChar(10) // general|worship|tech|kids|ushers
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
   deletedAt   DateTime?
   members     MinistryMember[]
   roles       ServiceRole[]
+  assignments ServiceAssignment[]
 
   @@index([accountId, isActive])
 }
@@ -40,14 +41,58 @@ model MinistryMember {
 
 // Puesto dentro de un ministerio ("Guitarra", "Ujier puerta").
 model ServiceRole {
-  id         Int      @id @default(autoincrement())
-  accountId  Int
-  account    Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ministryId Int
-  ministry   Ministry @relation(fields: [ministryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  name       String   @db.NVarChar(80)
-  sortOrder  Int      @default(0)
-  isActive   Boolean  @default(true)
+  id          Int                 @id @default(autoincrement())
+  accountId   Int
+  account     Account             @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ministryId  Int
+  ministry    Ministry            @relation(fields: [ministryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name        String              @db.NVarChar(80)
+  sortOrder   Int                 @default(0)
+  isActive    Boolean             @default(true)
+  assignments ServiceAssignment[]
 
   @@index([accountId, ministryId])
+}
+
+// Turno: una persona sirve en un puesto de un ministerio en una fecha de un evento (inicio original
+// de la fecha, como las inscripciones). La persona lo acepta o lo rechaza desde "Mis turnos".
+model ServiceAssignment {
+  id              Int           @id @default(autoincrement())
+  accountId       Int
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventId         Int
+  event           CalendarEvent @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occurrenceStart DateTime // hora local de la fecha (inicio original en los recurrentes)
+  ministryId      Int
+  ministry        Ministry      @relation(fields: [ministryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  serviceRoleId   Int
+  serviceRole     ServiceRole   @relation(fields: [serviceRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId        Int
+  person          Person        @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status          String        @default("pending") @db.VarChar(10) // pending|accepted|declined
+  respondedAt     DateTime?
+  declineReason   String?       @db.NVarChar(300)
+  notes           String?       @db.NVarChar(300)
+  assignedById    Int
+  createdAt       DateTime      @default(now())
+
+  @@unique([eventId, occurrenceStart, serviceRoleId, personId])
+  @@index([accountId, ministryId, occurrenceStart])
+  @@index([accountId, personId, occurrenceStart])
+}
+
+// Fechas en las que una persona avisa que no puede servir (vacaciones, viaje…).
+model Unavailability {
+  id          Int      @id @default(autoincrement())
+  accountId   Int
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId    Int
+  person      Person   @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromDate    DateTime @db.Date
+  toDate      DateTime @db.Date
+  reason      String?  @db.NVarChar(200)
+  createdById Int
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, personId, fromDate])
 }

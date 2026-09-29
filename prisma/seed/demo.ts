@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../../src/generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../../src/generated/prisma/client.js';
 import { hashPassword } from '../../src/core/auth/password.js';
 
 export const DEMO_SLUG = 'iglesia-demo';
@@ -35,6 +35,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoRegistrations(prisma, existing.id);
     await seedDemoAttendance(prisma, existing.id);
     await seedDemoMinistries(prisma, existing.id);
+    await seedDemoAssignments(prisma, existing.id);
     return;
   }
 
@@ -84,6 +85,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoRegistrations(prisma, account.id);
   await seedDemoAttendance(prisma, account.id);
   await seedDemoMinistries(prisma, account.id);
+  await seedDemoAssignments(prisma, account.id);
 }
 
 /**
@@ -666,6 +668,70 @@ async function seedDemoMinistries(prisma: PrismaClient, accountId: number) {
     }
   });
   console.log('✔ Ministerios de ejemplo: alabanza, técnica, ujieres y niños');
+}
+
+/**
+ * Turnos de ejemplo para los próximos 3 domingos (culto de la mañana): alabanza y técnica con
+ * algunos aceptados, uno rechazado y el resto pendientes, más una no disponibilidad. Idempotente.
+ */
+async function seedDemoAssignments(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.serviceAssignment.count({ where: { accountId } })) > 0) return;
+  const { addDays, dayOfWeek, todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  const service = await prisma.calendarEvent.findFirst({
+    where: { accountId, title: 'Culto dominical', deletedAt: null },
+  });
+  const ministries = await prisma.ministry.findMany({
+    where: { accountId, kind: { in: ['worship', 'tech'] }, deletedAt: null },
+    include: {
+      roles: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+      members: { where: { leftAt: null }, orderBy: { id: 'asc' } },
+    },
+  });
+  if (!service || ministries.length === 0) return;
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  let sunday = addDays(todayIn(account.timezone), 1);
+  while (dayOfWeek(sunday) !== 0) sunday = addDays(sunday, 1);
+  const time = service.startsAt.toISOString().slice(11, 16);
+  const rows: Prisma.ServiceAssignmentCreateManyInput[] = [];
+  for (let week = 0; week < 3; week++) {
+    const occurrenceStart = new Date(`${addDays(sunday, week * 7)}T${time}:00Z`);
+    for (const m of ministries) {
+      // Cada integrante en un puesto distinto, rotando semana a semana.
+      m.members.slice(0, m.roles.length).forEach((member, i) => {
+        const role = m.roles[(i + week) % m.roles.length]!;
+        const status =
+          week === 0 ? (i === 1 ? 'declined' : 'accepted') : week === 1 && i === 0 ? 'accepted' : 'pending';
+        rows.push({
+          accountId,
+          eventId: service.id,
+          occurrenceStart,
+          ministryId: m.id,
+          serviceRoleId: role.id,
+          personId: member.personId,
+          status,
+          respondedAt: status === 'pending' ? null : new Date(),
+          declineReason: status === 'declined' ? 'Estoy de viaje ese fin de semana' : null,
+          assignedById: admin.id,
+        });
+      });
+    }
+  }
+  await prisma.serviceAssignment.createMany({ data: rows });
+  const someone = ministries[0]!.members[2];
+  if (someone) {
+    await prisma.unavailability.create({
+      data: {
+        accountId,
+        personId: someone.personId,
+        fromDate: toDate(addDays(sunday, 14)),
+        toDate: toDate(addDays(sunday, 20)),
+        reason: 'Vacaciones',
+        createdById: admin.id,
+      },
+    });
+  }
+  console.log(`✔ Turnos de ejemplo: ${rows.length} en los próximos 3 domingos`);
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

@@ -7,6 +7,7 @@ import { dateToLocal, localToDate, nowLocalIn } from '../../core/time/local-date
 import { cellWhereFor } from '../cells/cells.service.js';
 import type { Viewer } from '../people/people.scope.js';
 import { endBefore, fromRule, isOccurrence, occurrences, Recurrence, toRule } from './recurrence.js';
+import { realignAssignments } from '../ministries/assignments.service.js';
 import { realignAttendance } from './attendance.service.js';
 import { promoteWaitlist, realignRegistrations } from './registrations.service.js';
 
@@ -338,6 +339,27 @@ async function findEvent(id: number) {
   return event;
 }
 
+/**
+ * Una fecha de un evento a partir de su inicio original: valida que sea de la serie y devuelve su
+ * horario real (con el cambio aplicado) y si está cancelada.
+ */
+export async function occurrenceInfo(eventId: number, occurrence: string) {
+  const e = await findEvent(eventId);
+  const at = localToDate(occurrence);
+  const valid = e.rrule ? isOccurrence(e.rrule, e.startsAt, at) : at.getTime() === e.startsAt.getTime();
+  if (!valid) throw AppError.badRequest('OCCURRENCE_INVALID');
+  const x = e.exceptions.find((ex) => ex.originalStart.getTime() === at.getTime());
+  const start = x?.newStartsAt ?? at;
+  const end = x?.newEndsAt ?? new Date(start.getTime() + (e.endsAt.getTime() - e.startsAt.getTime()));
+  return {
+    event: { id: e.id, title: e.title, type: e.type, location: e.location, allDay: e.allDay },
+    at,
+    start,
+    end,
+    cancelled: Boolean(x?.cancelled),
+  };
+}
+
 export async function getEvent(id: number) {
   const e = await findEvent(id);
   const now = localToDate(await accountNow());
@@ -449,10 +471,11 @@ export async function updateEvent(id: number, input: z.infer<typeof UpdateEventS
     before: { title: before.title, startsAt: dateToLocal(before.startsAt), rrule: before.rrule },
     after: { changed: Object.keys(input), removedExceptions: stale.length },
   });
-  // Las inscripciones y la asistencia siguen a su fecha si cambió el horario, y con más cupo sube
-  // la lista de espera.
+  // Las inscripciones, la asistencia y los turnos siguen a su fecha si cambió el horario, y con más
+  // cupo sube la lista de espera.
   await realignRegistrations(id, rrule, start, localToDate(range.endsAt));
   await realignAttendance(id, rrule, start);
+  await realignAssignments(id, rrule, start);
   await promoteWaitlist(id);
   return { ...(await getEvent(id)), removedExceptions: stale.length };
 }
@@ -517,7 +540,8 @@ export async function splitEvent(viewer: Viewer, id: number, input: z.infer<type
       },
       select: { id: true },
     });
-    // Las inscripciones y la asistencia de las fechas que pasan al evento nuevo lo acompañan.
+    // Las inscripciones, la asistencia y los turnos de las fechas que pasan al evento nuevo lo
+    // acompañan.
     await tx.eventRegistration.updateMany({
       where: { eventId: id, occurrenceStart: { gte: at } },
       data: { eventId: created.id },
@@ -526,10 +550,15 @@ export async function splitEvent(viewer: Viewer, id: number, input: z.infer<type
       where: { eventId: id, occurrenceStart: { gte: at } },
       data: { eventId: created.id },
     });
+    await tx.serviceAssignment.updateMany({
+      where: { eventId: id, occurrenceStart: { gte: at } },
+      data: { eventId: created.id },
+    });
     return created.id;
   });
   await realignRegistrations(createdId, newRule, newStart, localToDate(range.endsAt));
   await realignAttendance(createdId, newRule, newStart);
+  await realignAssignments(createdId, newRule, newStart);
   await audit({
     action: 'calendar.event.split',
     entity: 'CalendarEvent',
