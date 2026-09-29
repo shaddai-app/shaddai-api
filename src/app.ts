@@ -22,6 +22,7 @@ import { consolidationRouter } from './modules/consolidation/consolidation.route
 import { calendarRouter } from './modules/calendar/calendar.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import { ministriesRouter } from './modules/ministries/ministries.routes.js';
+import { worshipRouter } from './modules/worship/worship.routes.js';
 import { financeRouter } from './modules/finance/finance.routes.js';
 import { financeReportsRouter } from './modules/finance/reports/reports.routes.js';
 import { householdsRouter } from './modules/people/households.routes.js';
@@ -103,6 +104,7 @@ export function createApp() {
   api.use(calendarRouter);
   api.use(dashboardRouter);
   api.use(ministriesRouter);
+  api.use(worshipRouter);
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);

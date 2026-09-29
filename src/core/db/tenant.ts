@@ -50,6 +50,7 @@ export const TENANT_MODELS = new Set([
   'ServiceRole',
   'ServiceAssignment',
   'Unavailability',
+  'Song',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -76,6 +77,7 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
     financeAccount: { fk: 'financeAccountId', parent: 'FinanceAccount' },
   },
   EventException: { event: { fk: 'eventId', parent: 'CalendarEvent' } },
+  SongLink: { song: { fk: 'songId', parent: 'Song' } },
   CellReportAttendance: {
     report: { fk: 'reportId', parent: 'CellReport' },
     person: { fk: 'personId', parent: 'Person' },

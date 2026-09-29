@@ -1,0 +1,38 @@
+// Alabanza: repertorio de canciones (ChordPro) con sus enlaces. Las listas por culto usan estas
+// canciones.
+
+model Song {
+  id            Int        @id @default(autoincrement())
+  accountId     Int
+  account       Account    @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  title         String     @db.NVarChar(150)
+  author        String?    @db.NVarChar(150)
+  ccliNumber    String?    @db.VarChar(15)
+  originalKey   String?    @db.VarChar(4) // C, F#, Bb, Am, C#m…
+  bpm           Int?       @db.SmallInt
+  timeSignature String?    @db.VarChar(5) // 4/4, 6/8…
+  chordPro      String?    @db.NVarChar(Max)
+  tags          String?    @db.NVarChar(300) // separadas por coma
+  notes         String?    @db.NVarChar(1000)
+  // Título + autor + CCLI en minúsculas y sin acentos (la collation distingue acentos).
+  searchText    String     @default("") @db.NVarChar(450)
+  isActive      Boolean    @default(true)
+  createdById   Int
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  links         SongLink[]
+
+  @@index([accountId, title])
+}
+
+model SongLink {
+  id     Int     @id @default(autoincrement())
+  songId Int
+  song   Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  type   String  @db.VarChar(12) // youtube|spotify|multitrack|sheet|other
+  url    String  @db.NVarChar(500)
+  label  String? @db.NVarChar(100)
+
+  @@index([songId])
+}

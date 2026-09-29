@@ -36,6 +36,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoAttendance(prisma, existing.id);
     await seedDemoMinistries(prisma, existing.id);
     await seedDemoAssignments(prisma, existing.id);
+    await seedDemoSongs(prisma, existing.id);
     return;
   }
 
@@ -86,6 +87,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoAttendance(prisma, account.id);
   await seedDemoMinistries(prisma, account.id);
   await seedDemoAssignments(prisma, account.id);
+  await seedDemoSongs(prisma, account.id);
 }
 
 /**
@@ -732,6 +734,99 @@ async function seedDemoAssignments(prisma: PrismaClient, accountId: number) {
     });
   }
   console.log(`✔ Turnos de ejemplo: ${rows.length} en los próximos 3 domingos`);
+}
+
+/**
+ * Canciones de ejemplo con letra propia de la demo (no son canciones reales) en ChordPro, para
+ * probar la vista, la transposición y el modo escenario. Idempotente.
+ */
+async function seedDemoSongs(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.song.count({ where: { accountId } })) > 0) return;
+  const { fold } = await import('../../src/modules/people/people.service.js');
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const songs = [
+    {
+      title: 'Amanecer de gracia',
+      author: 'Equipo de alabanza Demo',
+      originalKey: 'G',
+      bpm: 72,
+      timeSignature: '4/4',
+      tags: 'Adoración,Lenta',
+      chordPro: [
+        '{title: Amanecer de gracia}',
+        '{key: G}',
+        '',
+        '{start_of_verse: Verso 1}',
+        '[G]Cada mañana [D/F#]nueva es tu [Em]luz',
+        '[C]llena mi casa [G]de tu [D]paz',
+        '[G]Aunque la noche [D/F#]fue larga y [Em]fría',
+        '[C]tu fidelidad [D]nunca se [G]va',
+        '{end_of_verse}',
+        '',
+        '{start_of_chorus}',
+        '[C]Canto a tu [G]nombre, [D]canto a tu [Em]amor',
+        '[C]eres mi [G]fuerza, [D]mi [G]Señor',
+        '{end_of_chorus}',
+      ].join('\n'),
+    },
+    {
+      title: 'Río de vida',
+      author: 'Equipo de alabanza Demo',
+      originalKey: 'D',
+      bpm: 128,
+      timeSignature: '4/4',
+      tags: 'Celebración,Rápida',
+      chordPro: [
+        '{title: Río de vida}',
+        '{key: D}',
+        '',
+        '{start_of_verse}',
+        '[D]Hay un río que [A]corre',
+        '[Bm]hay un canto que [G]nace',
+        '[D]todo lo que es[A]taba seco',
+        '[G]vuelve a flore[A]cer',
+        '{end_of_verse}',
+        '',
+        '{start_of_chorus}',
+        '[G]Salta mi co[D]razón, [A]danza mi [Bm]ser',
+        '[G]tu alegría es mi [A]fuerza otra [D]vez',
+        '{end_of_chorus}',
+      ].join('\n'),
+      links: [{ type: 'other', url: 'https://example.com/rio-de-vida', label: 'Guía de ensayo (ejemplo)' }],
+    },
+    {
+      title: 'En tu presencia',
+      author: 'Equipo de alabanza Demo',
+      originalKey: 'Am',
+      bpm: 66,
+      timeSignature: '6/8',
+      tags: 'Adoración,Santa cena',
+      chordPro: [
+        '{title: En tu presencia}',
+        '{key: Am}',
+        '',
+        '{comment: Intro suave, solo teclado}',
+        '{start_of_verse}',
+        '[Am]En tu pre[F]sencia me [C]quiero que[G]dar',
+        '[Am]donde tu [F]voz me en[E]seña a esperar',
+        '{end_of_verse}',
+      ].join('\n'),
+    },
+  ];
+  for (const { links, ...s } of songs as ((typeof songs)[number] & {
+    links?: { type: string; url: string; label: string }[];
+  })[]) {
+    await prisma.song.create({
+      data: {
+        accountId,
+        ...s,
+        searchText: fold(`${s.title} ${s.author}`),
+        createdById: admin.id,
+        links: { create: links ?? [] },
+      },
+    });
+  }
+  console.log(`✔ Canciones de ejemplo: ${songs.length}`);
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
