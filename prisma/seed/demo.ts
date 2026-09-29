@@ -34,6 +34,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoCalendar(prisma, existing.id);
     await seedDemoRegistrations(prisma, existing.id);
     await seedDemoAttendance(prisma, existing.id);
+    await seedDemoMinistries(prisma, existing.id);
     return;
   }
 
@@ -82,6 +83,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoCalendar(prisma, account.id);
   await seedDemoRegistrations(prisma, account.id);
   await seedDemoAttendance(prisma, account.id);
+  await seedDemoMinistries(prisma, account.id);
 }
 
 /**
@@ -611,6 +613,59 @@ async function seedDemoAttendance(prisma: PrismaClient, accountId: number) {
     return toLoad.length;
   });
   console.log(`✔ Asistencia de ejemplo: ${saved} cultos cargados y el último pendiente`);
+}
+
+/**
+ * Ministerios de ejemplo (alabanza, técnica, ujieres y niños) con sus puestos habituales, un líder y
+ * algunos integrantes de la base. Idempotente.
+ */
+async function seedDemoMinistries(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.ministry.count({ where: { accountId } })) > 0) return;
+  const { runInContext } = await import('../../src/core/context.js');
+  const { todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  const ministries = await import('../../src/modules/ministries/ministries.service.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const people = await prisma.person.findMany({
+    where: { accountId, deletedAt: null, status: { systemKey: { in: ['member', 'attendee'] } } },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  if (people.length < 12) return;
+  const viewer = {
+    userId: admin.id,
+    personId: null,
+    permissions: { 'ministerios.gestionar': 'all', 'ministerios.ver': 'all' },
+  } as unknown as Parameters<typeof ministries.createMinistry>[0];
+  const plan = [
+    { name: 'Alabanza', kind: 'worship', color: 'grape', team: people.slice(0, 7) },
+    { name: 'Técnica', kind: 'tech', color: 'cyan', team: people.slice(7, 10) },
+    { name: 'Ujieres', kind: 'ushers', color: 'orange', team: people.slice(10, 14) },
+    { name: 'Niños', kind: 'kids', color: 'pink', team: people.slice(2, 5) },
+  ] as const;
+  const joinedAt = toDate(todayIn(account.timezone));
+  await runInContext({ requestId: 'seed', userId: admin.id, accountId }, async () => {
+    for (const m of plan) {
+      const [leader, ...rest] = m.team;
+      const created = await ministries.createMinistry(viewer, {
+        name: m.name,
+        kind: m.kind,
+        color: m.color,
+        withDefaultRoles: true,
+        leaderPersonId: leader!.id,
+      });
+      await prisma.ministryMember.createMany({
+        data: rest.map((p, i) => ({
+          accountId,
+          ministryId: created.id,
+          personId: p.id,
+          role: i === 0 ? 'coleader' : 'servant',
+          joinedAt,
+        })),
+      });
+    }
+  });
+  console.log('✔ Ministerios de ejemplo: alabanza, técnica, ujieres y niños');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

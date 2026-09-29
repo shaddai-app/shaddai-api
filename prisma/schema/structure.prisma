@@ -13,6 +13,7 @@ model Campus {
   cells           Cell[]
   financeAccounts FinanceAccount[]
   calendarEvents  CalendarEvent[]
+  ministries      Ministry[]
 
   @@index([accountId])
 }

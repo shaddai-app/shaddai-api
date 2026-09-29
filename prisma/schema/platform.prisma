@@ -68,6 +68,9 @@ model Account {
   calendarEvents      CalendarEvent[]
   eventRegistrations  EventRegistration[]
   serviceAttendances  ServiceAttendance[]
+  ministries          Ministry[]
+  ministryMembers     MinistryMember[]
+  serviceRoles        ServiceRole[]
 
   @@index([status])
 }
