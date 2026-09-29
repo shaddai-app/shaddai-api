@@ -73,6 +73,7 @@ model Account {
   serviceRoles        ServiceRole[]
   serviceAssignments  ServiceAssignment[]
   unavailabilities    Unavailability[]
+  songs               Song[]
 
   @@index([status])
 }
