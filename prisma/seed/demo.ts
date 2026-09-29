@@ -38,6 +38,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoAssignments(prisma, existing.id);
     await seedDemoSongs(prisma, existing.id);
     await seedDemoSetlists(prisma, existing.id);
+    await seedDemoInventory(prisma, existing.id);
     return;
   }
 
@@ -90,6 +91,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoAssignments(prisma, account.id);
   await seedDemoSongs(prisma, account.id);
   await seedDemoSetlists(prisma, account.id);
+  await seedDemoInventory(prisma, account.id);
 }
 
 /**
@@ -890,6 +892,144 @@ async function seedDemoSetlists(prisma: PrismaClient, accountId: number) {
     });
   }
   console.log('✔ Listas de canciones de ejemplo: domingo pasado y próximo');
+}
+
+async function seedDemoInventory(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.inventoryItem.count({ where: { accountId } })) > 0) return;
+  const { randomBytes } = await import('node:crypto');
+  const { fold } = await import('../../src/modules/people/people.service.js');
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const campus = await prisma.campus.findFirst({ where: { accountId, isMain: true } });
+  const categories = await prisma.catalogItem.findMany({ where: { accountId, type: 'inventory_category' } });
+  const cat = (key: string) => categories.find((c) => c.systemKey === key)!.id;
+  const items = [
+    {
+      code: 'EQ-0001',
+      name: 'Consola digital',
+      category: 'audio',
+      brand: 'Behringer',
+      model: 'X32',
+      serialNumber: 'S1804-0231',
+      location: 'Cabina de sonido',
+      purchaseDate: '2022-05-14',
+      purchaseValue: '1850000',
+    },
+    {
+      code: 'EQ-0002',
+      name: 'Micrófono inalámbrico 1',
+      category: 'audio',
+      brand: 'Shure',
+      model: 'BLX24/SM58',
+      location: 'Cabina de sonido',
+    },
+    {
+      code: 'EQ-0003',
+      name: 'Micrófono inalámbrico 2',
+      category: 'audio',
+      brand: 'Shure',
+      model: 'BLX24/SM58',
+      location: 'Cabina de sonido',
+      status: 'faulty',
+      notes: 'Se corta la señal a partir de la mitad del salón.',
+    },
+    {
+      code: 'EQ-0004',
+      name: 'Proyector del salón',
+      category: 'video',
+      brand: 'Epson',
+      model: 'PowerLite X49',
+      location: 'Salón principal',
+      purchaseDate: '2023-02-01',
+      purchaseValue: '920000',
+    },
+    {
+      code: 'EQ-0005',
+      name: 'Teclado',
+      category: 'instruments',
+      brand: 'Yamaha',
+      model: 'PSR-E473',
+      location: 'Escenario',
+    },
+    {
+      code: 'EQ-0006',
+      name: 'Batería acústica',
+      category: 'instruments',
+      brand: 'Mapex',
+      model: 'Tornado',
+      location: 'Escenario',
+    },
+    {
+      code: 'EQ-0007',
+      name: 'Notebook de proyección',
+      category: 'computers',
+      brand: 'Lenovo',
+      model: 'IdeaPad 3',
+      serialNumber: 'PF3K9X2',
+      location: 'Cabina de sonido',
+      status: 'repair',
+    },
+    {
+      code: 'EQ-0008',
+      name: 'Barra LED par 64',
+      category: 'lighting',
+      brand: 'Gbr',
+      model: 'Par 64 LED',
+      location: 'Escenario',
+    },
+    { code: 'EQ-0009', name: 'Sillas plásticas (lote de 50)', category: 'furniture', location: 'Depósito' },
+  ];
+  const created = new Map<string, number>();
+  for (const { category, purchaseDate, purchaseValue, ...item } of items) {
+    const row = await prisma.inventoryItem.create({
+      data: {
+        accountId,
+        campusId: campus?.id ?? null,
+        categoryId: cat(category),
+        ...item,
+        purchaseDate: purchaseDate ? new Date(`${purchaseDate}T00:00:00Z`) : null,
+        purchaseValue: purchaseValue ?? null,
+        qrToken: randomBytes(16).toString('base64url'),
+        searchText: fold(
+          [item.name, item.code, item.brand, item.model, item.serialNumber].filter(Boolean).join(' '),
+        ),
+        createdById: admin.id,
+      },
+    });
+    created.set(item.code, row.id);
+  }
+  await prisma.inventoryMaintenance.createMany({
+    data: [
+      {
+        accountId,
+        itemId: created.get('EQ-0001')!,
+        date: new Date('2026-03-10T00:00:00Z'),
+        type: 'preventive',
+        description: 'Limpieza de faders y actualización de firmware.',
+        cost: '35000',
+        vendor: 'Audio Service Sur',
+        createdById: admin.id,
+      },
+      {
+        accountId,
+        itemId: created.get('EQ-0004')!,
+        date: new Date('2026-07-22T00:00:00Z'),
+        type: 'repair',
+        description: 'Cambio de lámpara.',
+        cost: '120000',
+        vendor: 'Proyectar SRL',
+        createdById: admin.id,
+      },
+      {
+        accountId,
+        itemId: created.get('EQ-0007')!,
+        date: new Date('2026-09-20T00:00:00Z'),
+        type: 'repair',
+        description: 'No enciende: llevada al servicio técnico.',
+        createdById: admin.id,
+      },
+    ],
+  });
+  console.log(`✔ Inventario de ejemplo: ${items.length} equipos con mantenimiento`);
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

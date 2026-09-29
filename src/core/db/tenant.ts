@@ -52,6 +52,8 @@ export const TENANT_MODELS = new Set([
   'Unavailability',
   'Song',
   'Setlist',
+  'InventoryItem',
+  'InventoryMaintenance',
 ]);
 
 /** relación -> { fk, modelo padre } */

@@ -1,0 +1,52 @@
+// Inventario: equipos de la iglesia con su QR (el token no expone el id) y su historial de
+// mantenimiento. Los préstamos cuelgan de estos equipos.
+
+model InventoryItem {
+  id            Int                    @id @default(autoincrement())
+  accountId     Int
+  account       Account                @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campusId      Int?
+  campus        Campus?                @relation(fields: [campusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  code          String                 @db.VarChar(20)
+  name          String                 @db.NVarChar(150)
+  categoryId    Int // CatalogItem(inventory_category)
+  category      CatalogItem            @relation("InventoryCategory", fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  brand         String?                @db.NVarChar(80)
+  model         String?                @db.NVarChar(80)
+  serialNumber  String?                @db.NVarChar(80)
+  status        String                 @default("ok") @db.VarChar(12) // ok|faulty|repair|retired
+  location      String?                @db.NVarChar(150)
+  purchaseDate  DateTime?              @db.Date
+  purchaseValue Decimal?               @db.Decimal(18, 2)
+  photoFileId   Int?
+  qrToken       String                 @unique @db.Char(22)
+  notes         String?                @db.NVarChar(1000)
+  // Nombre + código + marca + modelo + serie en minúsculas y sin acentos (la collation distingue acentos).
+  searchText    String                 @default("") @db.NVarChar(500)
+  createdById   Int
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  deletedAt     DateTime?
+  maintenance   InventoryMaintenance[]
+
+  @@unique([accountId, code])
+  @@index([accountId, status])
+  @@index([accountId, categoryId])
+}
+
+model InventoryMaintenance {
+  id          Int           @id @default(autoincrement())
+  accountId   Int
+  account     Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  itemId      Int
+  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  date        DateTime      @db.Date
+  type        String        @db.VarChar(12) // preventive|repair|check
+  description String        @db.NVarChar(1000)
+  cost        Decimal?      @db.Decimal(18, 2)
+  vendor      String?       @db.NVarChar(150)
+  createdById Int
+  createdAt   DateTime      @default(now())
+
+  @@index([accountId, itemId])
+}

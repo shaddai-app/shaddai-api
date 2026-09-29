@@ -75,8 +75,11 @@ async function usageCount(type: CatalogType, id: number): Promise<number> {
       return db.personMilestone.count({ where: { milestoneTypeId: id } });
     case 'position':
       return db.personPosition.count({ where: { positionId: id } });
+    case 'inventory_category':
+      // También los dados de baja: conservan su categoría en el historial.
+      return db.inventoryItem.count({ where: { categoryId: id } });
     default:
-      return 0; // inventario y eventos todavía no existen
+      return 0; // los eventos no usan este catálogo todavía
   }
 }
 
