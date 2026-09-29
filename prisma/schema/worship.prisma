@@ -2,26 +2,27 @@
 // canciones.
 
 model Song {
-  id            Int        @id @default(autoincrement())
+  id            Int           @id @default(autoincrement())
   accountId     Int
-  account       Account    @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  title         String     @db.NVarChar(150)
-  author        String?    @db.NVarChar(150)
-  ccliNumber    String?    @db.VarChar(15)
-  originalKey   String?    @db.VarChar(4) // C, F#, Bb, Am, C#m…
-  bpm           Int?       @db.SmallInt
-  timeSignature String?    @db.VarChar(5) // 4/4, 6/8…
-  chordPro      String?    @db.NVarChar(Max)
-  tags          String?    @db.NVarChar(300) // separadas por coma
-  notes         String?    @db.NVarChar(1000)
+  account       Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  title         String        @db.NVarChar(150)
+  author        String?       @db.NVarChar(150)
+  ccliNumber    String?       @db.VarChar(15)
+  originalKey   String?       @db.VarChar(4) // C, F#, Bb, Am, C#m…
+  bpm           Int?          @db.SmallInt
+  timeSignature String?       @db.VarChar(5) // 4/4, 6/8…
+  chordPro      String?       @db.NVarChar(Max)
+  tags          String?       @db.NVarChar(300) // separadas por coma
+  notes         String?       @db.NVarChar(1000)
   // Título + autor + CCLI en minúsculas y sin acentos (la collation distingue acentos).
-  searchText    String     @default("") @db.NVarChar(450)
-  isActive      Boolean    @default(true)
+  searchText    String        @default("") @db.NVarChar(450)
+  isActive      Boolean       @default(true)
   createdById   Int
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
   links         SongLink[]
+  setlistItems  SetlistItem[]
 
   @@index([accountId, title])
 }
@@ -34,5 +35,40 @@ model SongLink {
   url    String  @db.NVarChar(500)
   label  String? @db.NVarChar(100)
 
+  @@index([songId])
+}
+
+// Lista de canciones para una fecha de un evento (inicio original, como los turnos) o una fecha
+// suelta (un ensayo). En borrador solo la ve quien arma las listas; publicada la ve todo alabanza.
+model Setlist {
+  id              Int            @id @default(autoincrement())
+  accountId       Int
+  account         Account        @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventId         Int?
+  event           CalendarEvent? @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occurrenceStart DateTime // hora local (inicio original de la fecha del evento, o la fecha suelta)
+  title           String?        @db.NVarChar(150)
+  notes           String?        @db.NVarChar(1000)
+  status          String         @default("draft") @db.VarChar(10) // draft|published
+  createdById     Int
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  items           SetlistItem[]
+
+  @@index([accountId, occurrenceStart])
+  @@index([eventId, occurrenceStart])
+}
+
+model SetlistItem {
+  id        Int     @id @default(autoincrement())
+  setlistId Int
+  setlist   Setlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
+  songId    Int
+  song      Song    @relation(fields: [songId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  position  Int
+  key       String? @db.VarChar(4) // tonalidad en la que se canta esa vez
+  notes     String? @db.NVarChar(300)
+
+  @@index([setlistId, position])
   @@index([songId])
 }

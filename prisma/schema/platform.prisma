@@ -74,6 +74,7 @@ model Account {
   serviceAssignments  ServiceAssignment[]
   unavailabilities    Unavailability[]
   songs               Song[]
+  setlists            Setlist[]
 
   @@index([status])
 }
