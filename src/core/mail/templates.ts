@@ -102,3 +102,49 @@ export function actionMail(subject: string, paragraphs: string[], action: { labe
     html: layout(subject, paragraphs, action),
   };
 }
+
+const closureCopy = {
+  es: {
+    subject: (church: string) => `Baja de ${church} en Shaddai`,
+    hello: (name: string) => `Hola ${name}:`,
+    body: (church: string, date: string) =>
+      `Recibimos el pedido de baja de ${church}. Desde ahora nadie de la iglesia puede entrar y el ${date} se borran definitivamente todos sus datos y archivos.`,
+    undo: 'Si fue un error o necesitás recuperar algo antes de esa fecha, escribinos y la reactivamos.',
+    action: 'Escribir a soporte',
+  },
+  en: {
+    subject: (church: string) => `${church} closed on Shaddai`,
+    hello: (name: string) => `Hi ${name},`,
+    body: (church: string, date: string) =>
+      `We received the request to close ${church}. From now on nobody from the church can sign in, and on ${date} all its data and files will be permanently deleted.`,
+    undo: 'If this was a mistake or you need to recover something before that date, write to us and we will reactivate it.',
+    action: 'Contact support',
+  },
+  pt: {
+    subject: (church: string) => `Encerramento de ${church} no Shaddai`,
+    hello: (name: string) => `Olá ${name},`,
+    body: (church: string, date: string) =>
+      `Recebemos o pedido de encerramento de ${church}. A partir de agora ninguém da igreja pode entrar e em ${date} todos os seus dados e arquivos serão apagados definitivamente.`,
+    undo: 'Se foi um engano ou você precisa recuperar algo antes dessa data, escreva para nós e a reativamos.',
+    action: 'Falar com o suporte',
+  },
+} as const;
+
+/** Confirmación de la baja de una cuenta, con la fecha de borrado definitivo. */
+export function accountClosureMail(
+  locale: MailLocale,
+  data: { name: string; church: string; purgeAfter: Date; timezone: string; supportEmail: string },
+) {
+  const c = closureCopy[locale];
+  const date = new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone: data.timezone }).format(
+    data.purgeAfter,
+  );
+  const paragraphs = [c.hello(data.name), c.body(data.church, date), c.undo];
+  const subject = c.subject(data.church);
+  const action = { label: c.action, url: `mailto:${data.supportEmail}` };
+  return {
+    subject,
+    text: [...paragraphs, '', `${c.action}: ${data.supportEmail}`].join('\n'),
+    html: layout(subject, paragraphs, action),
+  };
+}

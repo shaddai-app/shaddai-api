@@ -9,6 +9,7 @@ import { logger } from './core/logger.js';
 import { contextMiddleware } from './core/context.js';
 import { errorHandler, notFoundHandler } from './core/middleware/error-handler.js';
 import { apiLimiter } from './core/middleware/rate-limit.js';
+import { accountDataRouter } from './modules/account/account-data.routes.js';
 import { accountRouter } from './modules/account/account.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
@@ -112,6 +113,7 @@ export function createApp() {
   api.use(usersRouter);
   api.use(rolesRouter);
   api.use(accountRouter);
+  api.use(accountDataRouter);
   api.use(platformRoutes);
   app.use('/api/v1', api);
 

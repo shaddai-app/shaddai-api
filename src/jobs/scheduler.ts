@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { purgeExpiredAccounts } from '../core/db/account-data.js';
 import { prisma } from '../core/db/prisma.js';
 import { purgeExpiredRateLimits } from '../core/db/rate-limit-store.js';
 import { logger } from '../core/logger.js';
@@ -7,7 +8,8 @@ import { runDailyNotices } from '../modules/notifications/daily.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
 // pasaron la hora del aviso diario en su zona horaria; la traba en la base evita correrlo dos veces
-// el mismo día, aunque haya varias instancias. También limpia los contadores vencidos del rate limit.
+// el mismo día, aunque haya varias instancias. También limpia los contadores vencidos del rate limit
+// y borra las iglesias dadas de baja cuyo plazo de conservación (90 días) ya venció.
 
 const EVERY_MS = 10 * 60_000;
 /** Cuentas que usan el sistema (no las suspendidas ni cerradas). */
@@ -35,6 +37,17 @@ export async function tickDailyNotices(now = new Date()) {
   }
 }
 
+/** Borra definitivamente las iglesias dadas de baja hace más de 90 días. */
+export async function purgeClosedAccounts(now = new Date()) {
+  try {
+    const purged = await purgeExpiredAccounts(now);
+    if (purged.length) logger.info({ accountIds: purged }, 'closed accounts purged');
+  } catch (err) {
+    logger.error({ err }, 'account purge failed');
+    reportError(err, { job: 'account-purge' });
+  }
+}
+
 /** Arranca los procesos programados; devuelve una función para detenerlos. */
 export function startJobs(): () => void {
   let running = false;
@@ -44,6 +57,7 @@ export function startJobs(): () => void {
     try {
       await tickDailyNotices();
       await purgeExpiredRateLimits();
+      await purgeClosedAccounts();
     } catch (err) {
       logger.error({ err }, 'jobs tick failed');
       reportError(err, { job: 'tick' });

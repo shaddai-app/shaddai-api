@@ -61,6 +61,8 @@ const EnvSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     MAIL_FROM: z.string().default('Shaddai <no-reply@shaddai.local>'),
+    // Contacto que ven las iglesias (baja de cuenta, política de privacidad).
+    SUPPORT_EMAIL: z.email().default('soporte@shaddai.local'),
 
     // Procesos programados (aviso diario de vencidos). En una instancia sola o en todas: se trancan
     // por cuenta y día en la base. Hora local de cada iglesia a partir de la cual corre.
