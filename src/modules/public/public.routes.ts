@@ -69,6 +69,7 @@ publicRouter.get('/public/:slug/logo', publicReadLimiter, async (req, res) => {
     'Cache-Control': 'public, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
     'Cross-Origin-Resource-Policy': 'cross-origin',
+    'Content-Security-Policy': "default-src 'none'; sandbox",
   });
   res.end(data);
 });

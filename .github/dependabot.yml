@@ -1,0 +1,20 @@
+# Actualizaciones de dependencias una vez por mes, agrupadas, y solo versiones con al menos una semana
+# publicadas (cooldown): da tiempo a que aparezca un paquete comprometido antes de instalarlo.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      menores:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7

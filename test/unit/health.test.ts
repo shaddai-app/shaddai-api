@@ -22,5 +22,8 @@ describe('health', () => {
     const res = await request(app).get('/api/v1/health');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['x-powered-by']).toBeUndefined();
+    expect(res.headers['strict-transport-security']).toContain('max-age=31536000');
+    expect(res.headers['content-security-policy']).toContain("frame-ancestors 'self'");
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 });

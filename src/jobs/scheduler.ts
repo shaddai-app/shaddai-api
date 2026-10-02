@@ -2,6 +2,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../core/db/prisma.js';
 import { purgeExpiredRateLimits } from '../core/db/rate-limit-store.js';
 import { logger } from '../core/logger.js';
+import { reportError } from '../core/observability/sentry.js';
 import { runDailyNotices } from '../modules/notifications/daily.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
@@ -29,6 +30,7 @@ export async function tickDailyNotices(now = new Date()) {
       if (result) logger.info({ accountId: account.id, ...result }, 'daily notices');
     } catch (err) {
       logger.error({ err, accountId: account.id }, 'daily notices failed');
+      reportError(err, { job: 'daily-notices', accountId: account.id });
     }
   }
 }
@@ -44,6 +46,7 @@ export function startJobs(): () => void {
       await purgeExpiredRateLimits();
     } catch (err) {
       logger.error({ err }, 'jobs tick failed');
+      reportError(err, { job: 'tick' });
     } finally {
       running = false;
     }

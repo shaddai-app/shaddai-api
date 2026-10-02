@@ -230,6 +230,8 @@ t.get('/files/:id', 'account-user', async (req, res) => {
     'Cache-Control': 'private, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
     'Content-Disposition': 'inline',
+    // Si alguien abre el archivo directo en el navegador, no puede ejecutar nada en el origen de la API.
+    'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox",
   });
   res.end(data);
 });
