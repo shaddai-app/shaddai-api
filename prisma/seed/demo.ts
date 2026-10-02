@@ -40,6 +40,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoSetlists(prisma, existing.id);
     await seedDemoInventory(prisma, existing.id);
     await seedDemoLoans(prisma, existing.id);
+    await seedDemoNotifications(prisma, existing.id);
     return;
   }
 
@@ -94,6 +95,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoSetlists(prisma, account.id);
   await seedDemoInventory(prisma, account.id);
   await seedDemoLoans(prisma, account.id);
+  await seedDemoNotifications(prisma, account.id);
 }
 
 /**
@@ -1072,6 +1074,36 @@ async function seedDemoLoans(prisma: PrismaClient, accountId: number) {
     });
   }
   console.log('✔ Préstamos de ejemplo: uno al día, uno vencido y uno devuelto');
+}
+
+/** Avisos de ejemplo para el admin de la demo, a partir del turno rechazado del seed. */
+async function seedDemoNotifications(prisma: PrismaClient, accountId: number) {
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  if ((await prisma.notification.count({ where: { userId: admin.id } })) > 0) return;
+  const { dateToLocal } = await import('../../src/core/time/local-date.js');
+  const declined = await prisma.serviceAssignment.findFirst({
+    where: { accountId, status: 'declined' },
+    include: { person: true, ministry: true, serviceRole: true, event: true },
+  });
+  if (!declined) return;
+  const startsAt = dateToLocal(declined.occurrenceStart);
+  await prisma.notification.create({
+    data: {
+      accountId,
+      userId: admin.id,
+      type: 'assignment.declined',
+      params: JSON.stringify({
+        person: `${declined.person.firstName} ${declined.person.lastName}`,
+        ministry: declined.ministry.name,
+        role: declined.serviceRole.name,
+        event: declined.event.title,
+        startsAt,
+        reason: declined.declineReason,
+      }),
+      link: `/ministerios/${declined.ministryId}/turnos?desde=${startsAt.slice(0, 10)}`,
+    },
+  });
+  console.log('✔ Aviso de ejemplo para el admin de la demo');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

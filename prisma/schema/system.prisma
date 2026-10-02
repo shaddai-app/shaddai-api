@@ -35,3 +35,22 @@ model AuditLog {
   @@index([accountId, createdAt])
   @@index([accountId, entity, entityId])
 }
+
+// Avisos para un usuario (centro de notificaciones). El texto lo arma el front con su i18n a partir
+// de `type` y `params` (JSON); el mail, si corresponde según sus preferencias, lo arma la API.
+model Notification {
+  id        Int       @id @default(autoincrement())
+  accountId Int
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type      String    @db.VarChar(40)
+  params    String?   @db.NVarChar(Max)
+  link      String?   @db.VarChar(300)
+  readAt    DateTime?
+  emailedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([accountId, userId, readAt])
+  @@index([userId, createdAt])
+}

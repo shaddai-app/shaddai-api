@@ -78,6 +78,7 @@ model Account {
   inventoryItems       InventoryItem[]
   inventoryMaintenance InventoryMaintenance[]
   inventoryLoans       InventoryLoan[]
+  notifications        Notification[]
 
   @@index([status])
 }

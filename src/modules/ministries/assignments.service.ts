@@ -7,6 +7,7 @@ import { EVENT_TYPES, eventOccurrences, occurrenceInfo } from '../calendar/calen
 import { alignOccurrence } from '../calendar/recurrence.js';
 import { isoDate } from '../people/people.service.js';
 import type { Viewer } from '../people/people.scope.js';
+import { notify } from '../notifications/notifications.service.js';
 import { accountNow, ministryInScope } from './ministries.service.js';
 
 // Turnos: quién sirve en qué puesto de un ministerio en cada fecha de un evento. La persona lo
@@ -284,6 +285,24 @@ export async function assign(viewer: Viewer, ministryId: number, input: z.infer<
     entityId: ministryId,
     after: { assignmentId: created.id, ...input, warnings: warnings.map((w) => w.code) },
   });
+  // Aviso a la persona asignada (si tiene usuario y no es quien la asignó).
+  const [user, ministry] = await Promise.all([
+    db.user.findFirst({ where: { personId: input.personId }, select: { id: true } }),
+    db.ministry.findUniqueOrThrow({ where: { id: ministryId }, select: { name: true } }),
+  ]);
+  if (user && user.id !== viewer.userId) {
+    await notify({
+      userIds: [user.id],
+      type: 'assignment.created',
+      params: {
+        ministry: ministry.name,
+        role: role.name,
+        event: o.event.title,
+        startsAt: dateToLocal(o.start),
+      },
+      link: '/mis-turnos',
+    });
+  }
   return { id: created.id, warnings };
 }
 
@@ -367,7 +386,17 @@ export async function respond(viewer: Viewer, id: number, input: z.infer<typeof 
   const a = viewer.personId
     ? await db.serviceAssignment.findFirst({
         where: { id, personId: viewer.personId },
-        select: { id: true, eventId: true, occurrenceStart: true, status: true, ministryId: true },
+        select: {
+          id: true,
+          eventId: true,
+          occurrenceStart: true,
+          status: true,
+          ministryId: true,
+          assignedById: true,
+          ministry: { select: { name: true } },
+          serviceRole: { select: { name: true } },
+          person: { select: { firstName: true, lastName: true } },
+        },
       })
     : null;
   if (!a) throw AppError.notFound('ASSIGNMENT_NOT_FOUND');
@@ -389,6 +418,32 @@ export async function respond(viewer: Viewer, id: number, input: z.infer<typeof 
     before: { assignmentId: id, status: a.status },
     after: { status },
   });
+  if (status === 'declined' && a.status !== 'declined') {
+    // Aviso a quien asignó el turno y a quienes lideran el ministerio.
+    const leaders = await db.user.findMany({
+      where: {
+        person: {
+          ministryMemberships: {
+            some: { ministryId: a.ministryId, leftAt: null, role: { in: ['leader', 'coleader'] } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    await notify({
+      userIds: [a.assignedById, ...leaders.map((u) => u.id)].filter((u) => u !== viewer.userId),
+      type: 'assignment.declined',
+      params: {
+        person: `${a.person.firstName} ${a.person.lastName}`,
+        ministry: a.ministry.name,
+        role: a.serviceRole.name,
+        event: o.event.title,
+        startsAt: dateToLocal(o.start),
+        reason: input.reason ?? null,
+      },
+      link: `/ministerios/${a.ministryId}/turnos?desde=${dateToLocal(o.start).slice(0, 10)}`,
+    });
+  }
   return myAssignments(viewer);
 }
 
