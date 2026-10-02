@@ -1,11 +1,12 @@
 import { env } from '../config/env.js';
 import { prisma } from '../core/db/prisma.js';
+import { purgeExpiredRateLimits } from '../core/db/rate-limit-store.js';
 import { logger } from '../core/logger.js';
 import { runDailyNotices } from '../modules/notifications/daily.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
 // pasaron la hora del aviso diario en su zona horaria; la traba en la base evita correrlo dos veces
-// el mismo día, aunque haya varias instancias.
+// el mismo día, aunque haya varias instancias. También limpia los contadores vencidos del rate limit.
 
 const EVERY_MS = 10 * 60_000;
 /** Cuentas que usan el sistema (no las suspendidas ni cerradas). */
@@ -40,6 +41,7 @@ export function startJobs(): () => void {
     running = true;
     try {
       await tickDailyNotices();
+      await purgeExpiredRateLimits();
     } catch (err) {
       logger.error({ err }, 'jobs tick failed');
     } finally {
