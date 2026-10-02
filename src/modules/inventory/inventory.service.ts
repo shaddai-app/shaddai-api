@@ -15,8 +15,10 @@ import type { Viewer } from '../people/people.scope.js';
 // Inventario: equipos con su QR y su mantenimiento. El QR apunta al front (/i/<token>), que con
 // sesiÃ³n y permiso abre la ficha; el token es aleatorio y no expone el id.
 
-export const ITEM_STATUSES = ['ok', 'faulty', 'repair', 'retired'] as const;
-export const MAINTENANCE_TYPES = ['preventive', 'repair', 'check'] as const;
+import { ITEM_STATUSES, MAINTENANCE_TYPES } from './constants.js';
+import { accountToday, openLoansFor } from './loans.service.js';
+
+export { ITEM_STATUSES, MAINTENANCE_TYPES };
 
 const optionalText = (max: number) =>
   z
@@ -64,6 +66,7 @@ export const ListItemsQuery = PaginationQuery.extend({
   status: z.enum(ITEM_STATUSES).optional(),
   // Los dados de baja solo aparecen si se piden (o se filtra por ese estado).
   includeRetired: z.stringbool().default(false),
+  onLoan: z.stringbool().optional(), // solo los prestados
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
@@ -149,13 +152,14 @@ export async function listItems(q: z.infer<typeof ListItemsQuery>) {
       ...words.map((w) => ({ searchText: { contains: w } })),
       ...(q.categoryId ? [{ categoryId: q.categoryId }] : []),
       ...(q.campusId ? [{ campusId: q.campusId }] : []),
+      ...(q.onLoan ? [{ loans: { some: { returnedAt: null } } }] : []),
     ],
   };
   const where: Prisma.InventoryItemWhereInput = {
     AND: [base, q.status ? { status: q.status } : q.includeRetired ? {} : { status: { not: 'retired' } }],
   };
   const db = tenantDb();
-  const [items, total, byStatus] = await Promise.all([
+  const [items, total, byStatus, onLoan, today] = await Promise.all([
     db.inventoryItem.findMany({
       where,
       select: listSelect,
@@ -165,10 +169,23 @@ export async function listItems(q: z.infer<typeof ListItemsQuery>) {
     db.inventoryItem.count({ where }),
     // CuÃ¡ntos hay en cada estado con los mismos filtros (para las pestaÃ±as).
     db.inventoryItem.groupBy({ by: ['status'], where: base, _count: { _all: true } }),
+    db.inventoryItem.count({ where: { AND: [base, { loans: { some: { returnedAt: null } } }] } }),
+    accountToday(),
   ]);
+  const loans = await openLoansFor(
+    items.map((i) => i.id),
+    today,
+  );
   const counts = Object.fromEntries(ITEM_STATUSES.map((s) => [s, 0])) as Record<string, number>;
   for (const row of byStatus) counts[row.status] = row._count._all;
-  return { ...paged(items, total, q), counts };
+  return {
+    ...paged(
+      items.map((i) => ({ ...i, loan: loans.get(i.id) ?? null })),
+      total,
+      q,
+    ),
+    counts: { ...counts, onLoan },
+  };
 }
 
 async function findItem(id: number) {
@@ -204,8 +221,10 @@ async function findItem(id: number) {
 export async function getItem(id: number) {
   const { purchaseDate, purchaseValue, qrToken, maintenance, ...item } = await findItem(id);
   const maintenanceCost = maintenance.reduce((sum, m) => (m.cost ? sum.add(m.cost) : sum), toMoney(0));
+  const loans = await openLoansFor([id], await accountToday());
   return {
     ...item,
+    loan: loans.get(id) ?? null, // préstamo abierto (sin datos de la persona: eso pide inventario.prestamos)
     purchaseDate: isoDate(purchaseDate),
     purchaseValue: present(purchaseValue),
     qrUrl: qrUrl(qrToken),
@@ -281,6 +300,12 @@ export async function updateItem(id: number, input: z.infer<typeof UpdateItemSch
  */
 export async function deleteItem(id: number) {
   const item = await findItem(id);
+  // Prestado: primero hay que registrar la devolución.
+  const open = await tenantDb().inventoryLoan.findFirst({
+    where: { itemId: id, returnedAt: null },
+    select: { id: true },
+  });
+  if (open) throw AppError.conflict('INVENTORY_ITEM_ON_LOAN', { id: open.id });
   await tenantDb().inventoryItem.update({
     where: { id },
     data: { deletedAt: new Date(), code: `~${id}`, photoFileId: null },

@@ -91,7 +91,7 @@ describe('inventario', () => {
     expect((await get(c.headers, '/inventory/items?q=proyector')).body.items[0].id).toBe(projector.id);
     const all = (await get(c.headers, '/inventory/items')).body;
     expect(all.total).toBe(2);
-    expect(all.counts).toEqual({ ok: 1, faulty: 1, repair: 0, retired: 0 });
+    expect(all.counts).toEqual({ ok: 1, faulty: 1, repair: 0, retired: 0, onLoan: 0 });
     expect((await get(c.headers, `/inventory/items?categoryId=${video}`)).body.items).toHaveLength(1);
 
     // Dado de baja: no aparece salvo que se pida.
