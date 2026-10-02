@@ -866,6 +866,10 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
     }
     await tx.consolidationCase.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.followUp.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    await tx.inventoryLoan.updateMany({
+      where: { borrowerPersonId: sourceId },
+      data: { borrowerPersonId: intoId },
+    });
     await tx.personTag.deleteMany({ where: { personId: sourceId } });
     if (newTags.length) {
       await tx.personTag.createMany({ data: newTags.map((tagId) => ({ personId: intoId, tagId })) });

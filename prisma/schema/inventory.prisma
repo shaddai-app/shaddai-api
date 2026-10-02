@@ -28,6 +28,7 @@ model InventoryItem {
   updatedAt     DateTime               @updatedAt
   deletedAt     DateTime?
   maintenance   InventoryMaintenance[]
+  loans         InventoryLoan[]
 
   @@unique([accountId, code])
   @@index([accountId, status])
@@ -49,4 +50,29 @@ model InventoryMaintenance {
   createdAt   DateTime      @default(now())
 
   @@index([accountId, itemId])
+}
+
+// Préstamo de un equipo a una persona. Las fechas son días del calendario de la iglesia; vence al
+// terminar el día dueAt. Un equipo tiene como mucho un préstamo abierto (returnedAt null).
+model InventoryLoan {
+  id               Int           @id @default(autoincrement())
+  accountId        Int
+  account          Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  itemId           Int
+  item             InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  borrowerPersonId Int
+  borrower         Person        @relation(fields: [borrowerPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  borrowedAt       DateTime      @db.Date
+  dueAt            DateTime      @db.Date
+  returnedAt       DateTime?
+  conditionOut     String?       @db.NVarChar(200)
+  conditionIn      String?       @db.NVarChar(200)
+  notes            String?       @db.NVarChar(500)
+  createdById      Int
+  returnedById     Int?
+  createdAt        DateTime      @default(now())
+
+  @@index([accountId, returnedAt, dueAt])
+  @@index([accountId, itemId])
+  @@index([accountId, borrowerPersonId])
 }

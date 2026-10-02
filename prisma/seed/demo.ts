@@ -39,6 +39,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoSongs(prisma, existing.id);
     await seedDemoSetlists(prisma, existing.id);
     await seedDemoInventory(prisma, existing.id);
+    await seedDemoLoans(prisma, existing.id);
     return;
   }
 
@@ -92,6 +93,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoSongs(prisma, account.id);
   await seedDemoSetlists(prisma, account.id);
   await seedDemoInventory(prisma, account.id);
+  await seedDemoLoans(prisma, account.id);
 }
 
 /**
@@ -1030,6 +1032,46 @@ async function seedDemoInventory(prisma: PrismaClient, accountId: number) {
     ],
   });
   console.log(`✔ Inventario de ejemplo: ${items.length} equipos con mantenimiento`);
+}
+
+async function seedDemoLoans(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.inventoryLoan.count({ where: { accountId } })) > 0) return;
+  const { addDays, todayIn, toDate } = await import('../../src/core/time/local-date.js');
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
+  const admin = await prisma.user.findFirstOrThrow({ where: { accountId, isAccountOwner: true } });
+  const item = (code: string) =>
+    prisma.inventoryItem.findFirst({ where: { accountId, code, deletedAt: null } });
+  const people = await prisma.person.findMany({
+    where: { accountId, deletedAt: null },
+    orderBy: { id: 'asc' },
+    take: 3,
+  });
+  const [keyboard, mic, projector] = await Promise.all([item('EQ-0005'), item('EQ-0002'), item('EQ-0004')]);
+  if (!keyboard || !mic || !projector || people.length < 3) return;
+  const today = todayIn(account.timezone);
+  const loans = [
+    { itemId: keyboard.id, person: people[0]!, from: -2, due: 5, conditionOut: 'Con fuente y atril' },
+    { itemId: mic.id, person: people[1]!, from: -12, due: -2, conditionOut: 'Con pilas nuevas' },
+    { itemId: projector.id, person: people[2]!, from: -40, due: -33, conditionOut: null, returned: -33 },
+  ];
+  for (const l of loans) {
+    await prisma.inventoryLoan.create({
+      data: {
+        accountId,
+        itemId: l.itemId,
+        borrowerPersonId: l.person.id,
+        borrowedAt: toDate(addDays(today, l.from)),
+        dueAt: toDate(addDays(today, l.due)),
+        conditionOut: l.conditionOut,
+        notes: l.returned === undefined ? null : 'Para el campamento de jóvenes',
+        returnedAt: l.returned === undefined ? null : new Date(`${addDays(today, l.returned)}T20:00:00Z`),
+        conditionIn: l.returned === undefined ? null : 'Sin novedades',
+        returnedById: l.returned === undefined ? null : admin.id,
+        createdById: admin.id,
+      },
+    });
+  }
+  console.log('✔ Préstamos de ejemplo: uno al día, uno vencido y uno devuelto');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

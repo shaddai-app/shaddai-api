@@ -54,6 +54,7 @@ export const TENANT_MODELS = new Set([
   'Setlist',
   'InventoryItem',
   'InventoryMaintenance',
+  'InventoryLoan',
 ]);
 
 /** relación -> { fk, modelo padre } */

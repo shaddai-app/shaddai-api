@@ -9,6 +9,7 @@ import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as inventory from './inventory.service.js';
 import { renderLabels } from './labels.js';
+import * as loans from './loans.service.js';
 
 const t = tenantRouter();
 export const inventoryRouter = t.router;
@@ -110,4 +111,41 @@ t.get('/inventory/items/:id/label.pdf', 'inventario.gestionar', async (req, res)
 t.get('/inventory/labels.pdf', 'inventario.gestionar', async (req, res) => {
   const { ids } = parse(inventory.LabelsQuery, req.query);
   await sendLabels(res, ids, 'etiquetas.pdf');
+});
+
+// ───────────── Préstamos ─────────────
+
+t.get('/inventory/loans', 'inventario.prestamos', async (req, res) => {
+  res.json(await loans.listLoans(parse(loans.ListLoansQuery, req.query)));
+});
+
+t.get('/inventory/borrowers', 'inventario.prestamos', async (req, res) => {
+  const { q } = parse(loans.BorrowersQuery, req.query);
+  res.json(await loans.searchBorrowers(q));
+});
+
+t.get('/inventory/loans/:id', 'inventario.prestamos', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await loans.getLoan(id));
+});
+
+t.post('/inventory/loans', 'inventario.prestamos', async (req, res) => {
+  const input = parse(loans.CreateLoanSchema, req.body);
+  res.status(201).json(await loans.createLoan(await viewerOf(req), input));
+});
+
+t.patch('/inventory/loans/:id', 'inventario.prestamos', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await loans.updateLoan(id, parse(loans.UpdateLoanSchema, req.body)));
+});
+
+t.post('/inventory/loans/:id/return', 'inventario.prestamos', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  res.json(await loans.returnLoan(await viewerOf(req), id, parse(loans.ReturnLoanSchema, req.body ?? {})));
+});
+
+t.delete('/inventory/loans/:id', 'inventario.prestamos', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  await loans.deleteLoan(id);
+  res.status(204).end();
 });
