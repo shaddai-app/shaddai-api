@@ -110,3 +110,7 @@ await tenantDb().campus.create({ data: { ...data, accountId: currentAccountId() 
 - Tests: `test/integration/permissions.test.ts` recorre **todas** las rutas registradas (401 sin token, 403 sin permiso); cada módulo suma sus tests de aislamiento A/B.
 
 Ver [CONTRIBUTING.md](CONTRIBUTING.md) para ramas y commits.
+
+## Producción
+
+Las decisiones de infraestructura (Azure, Cloudflare, Brevo, R2, Sentry), el porqué, los registros DNS y la lista de pasos pendientes están en [docs/produccion.md](docs/produccion.md).
