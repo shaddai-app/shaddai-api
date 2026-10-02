@@ -93,3 +93,12 @@ export function passwordResetMail(locale: MailLocale, name: string, url: string)
     html: layout(c.subject, paragraphs, { label: c.action, url }),
   };
 }
+
+/** Mail con título, párrafos y un botón (avisos del centro de notificaciones). */
+export function actionMail(subject: string, paragraphs: string[], action: { label: string; url: string }) {
+  return {
+    subject,
+    text: [...paragraphs, '', `${action.label}: ${action.url}`].join('\n'),
+    html: layout(subject, paragraphs, action),
+  };
+}

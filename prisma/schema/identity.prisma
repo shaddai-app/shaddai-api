@@ -33,6 +33,7 @@ model User {
   financeAccounts     FinanceAccount[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  notifications       Notification[]
 
   @@index([accountId, isActive])
   @@index([personId])
