@@ -50,6 +50,11 @@ const EnvSchema = z
     SMTP_PASSWORD: z.string().optional(),
     MAIL_FROM: z.string().default('Shaddai <no-reply@shaddai.local>'),
 
+    // Procesos programados (aviso diario de vencidos). En una instancia sola o en todas: se trancan
+    // por cuenta y día en la base. Hora local de cada iglesia a partir de la cual corre.
+    JOBS_ENABLED: bool('true'),
+    DAILY_NOTICES_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+
     // Cloudflare Turnstile para formularios públicos. Sin secreto (solo fuera de producción) no se verifica.
     TURNSTILE_SECRET: z.string().optional(),
     TURNSTILE_SITE_KEY: z.string().optional(),

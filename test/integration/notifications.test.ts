@@ -168,7 +168,9 @@ describe('notificaciones', () => {
     await assign();
     await emailsSettled();
     expect(memoryOutbox).toHaveLength(0);
-    expect(await prisma.notification.count({ where: { userId: anaUser.user.id } })).toBe(1);
+    // Una fila visible (la del principio) y otra oculta: el registro del mail sin aviso en la app.
+    expect(await prisma.notification.count({ where: { userId: anaUser.user.id, inApp: true } })).toBe(1);
+    expect(await prisma.notification.count({ where: { userId: anaUser.user.id } })).toBe(2);
 
     // Otra iglesia no ve ni marca avisos ajenos.
     const other = await provisionChurch();

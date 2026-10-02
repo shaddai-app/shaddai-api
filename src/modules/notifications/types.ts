@@ -17,6 +17,8 @@ interface MailCopy {
 interface Formatters {
   /** "2026-10-04T10:00" (hora local de la iglesia) → "domingo 4 de octubre, 10:00". */
   dateTime: (local: unknown) => string;
+  /** "2026-10-04" → "4 de octubre". */
+  date: (iso: unknown) => string;
 }
 
 interface TypeDef {
@@ -91,6 +93,102 @@ export const NOTIFICATION_TYPES = {
       },
     },
   },
+  // Proceso diario: a quienes prestan equipos, por cada préstamo vencido.
+  'loan.overdue': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => `Préstamo vencido: ${s(p.item)}`,
+        body: (p, f) => [
+          `El préstamo de ${s(p.item)} (${s(p.code)}) a ${s(p.person)} venció el ${f.date(p.dueAt)} y todavía no se devolvió.`,
+          'Registrá la devolución o extendé el vencimiento.',
+        ],
+        action: 'Ver préstamos',
+      },
+      en: {
+        subject: (p) => `Overdue loan: ${s(p.item)}`,
+        body: (p, f) => [
+          `The loan of ${s(p.item)} (${s(p.code)}) to ${s(p.person)} was due on ${f.date(p.dueAt)} and hasn’t been returned.`,
+          'Record the return or extend the due date.',
+        ],
+        action: 'See loans',
+      },
+      pt: {
+        subject: (p) => `Empréstimo vencido: ${s(p.item)}`,
+        body: (p, f) => [
+          `O empréstimo de ${s(p.item)} (${s(p.code)}) para ${s(p.person)} venceu em ${f.date(p.dueAt)} e ainda não foi devolvido.`,
+          'Registre a devolução ou prorrogue o vencimento.',
+        ],
+        action: 'Ver empréstimos',
+      },
+    },
+  },
+  // Proceso diario: al consolidador del caso (o, sin consolidador, a quienes asignan casos).
+  'consolidation.overdue': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => `Seguimiento vencido: ${s(p.person)}`,
+        body: (p, f) => [
+          `El paso actual del seguimiento de ${s(p.person)} venció el ${f.date(p.dueAt)}.`,
+          p.unassigned
+            ? 'El caso no tiene consolidador: asigná a alguien para que lo acompañe.'
+            : 'Contactala o contactalo y registrá cómo sigue.',
+        ],
+        action: 'Ver el caso',
+      },
+      en: {
+        subject: (p) => `Overdue follow-up: ${s(p.person)}`,
+        body: (p, f) => [
+          `The current step of ${s(p.person)}’s follow-up was due on ${f.date(p.dueAt)}.`,
+          p.unassigned
+            ? 'The case has no consolidator: assign someone to walk with them.'
+            : 'Get in touch and record how it’s going.',
+        ],
+        action: 'See the case',
+      },
+      pt: {
+        subject: (p) => `Acompanhamento vencido: ${s(p.person)}`,
+        body: (p, f) => [
+          `A etapa atual do acompanhamento de ${s(p.person)} venceu em ${f.date(p.dueAt)}.`,
+          p.unassigned
+            ? 'O caso não tem consolidador: designe alguém para acompanhá-lo.'
+            : 'Entre em contato e registre como está.',
+        ],
+        action: 'Ver o caso',
+      },
+    },
+  },
+  // Proceso diario: al líder de la célula que no cargó el reporte de su reunión.
+  'cell.report_missing': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => `Falta el reporte de ${s(p.cell)}`,
+        body: (p, f) => [
+          `Todavía no está cargado el reporte de la reunión de ${s(p.cell)} del ${f.date(p.date)}.`,
+          'Cargalo desde «Mi célula», aunque no se haya hecho la reunión.',
+        ],
+        action: 'Cargar el reporte',
+      },
+      en: {
+        subject: (p) => `Missing report: ${s(p.cell)}`,
+        body: (p, f) => [
+          `The report for ${s(p.cell)}’s meeting on ${f.date(p.date)} hasn’t been submitted yet.`,
+          'Submit it from “My cell”, even if the meeting didn’t take place.',
+        ],
+        action: 'Submit the report',
+      },
+      pt: {
+        subject: (p) => `Falta o relatório de ${s(p.cell)}`,
+        body: (p, f) => [
+          `O relatório da reunião de ${s(p.cell)} de ${f.date(p.date)} ainda não foi enviado.`,
+          'Envie em «Minha célula», mesmo que a reunião não tenha acontecido.',
+        ],
+        action: 'Enviar o relatório',
+      },
+    },
+  },
 } satisfies Record<string, TypeDef>;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
@@ -107,7 +205,16 @@ export function formatters(locale: MailLocale): Formatters {
     hour: '2-digit',
     minute: '2-digit',
   });
+  const dateFmt = new Intl.DateTimeFormat(intlLocale(locale), {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+  });
   return {
+    date: (iso) =>
+      typeof iso === 'string' && /^d{4}-d{2}-d{2}$/.test(iso)
+        ? dateFmt.format(new Date(`${iso}T00:00:00Z`))
+        : '',
     dateTime: (local) => {
       const text = typeof local === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local) ? local : null;
       return text ? fmt.format(new Date(`${text}:00Z`)) : '';

@@ -49,8 +49,30 @@ model Notification {
   link      String?   @db.VarChar(300)
   readAt    DateTime?
   emailedAt DateTime?
+  // false: el usuario apagó este aviso en la app; queda solo como registro del mail (y para no
+  // repetirlo).
+  inApp     Boolean   @default(true)
+  // Avisos del proceso diario: el mismo hecho (ej. un préstamo vencido) se avisa una sola vez.
+  dedupeKey String?   @db.VarChar(150)
   createdAt DateTime  @default(now())
 
   @@index([accountId, userId, readAt])
   @@index([userId, createdAt])
+  @@index([userId, dedupeKey])
+}
+
+// Traba de los procesos diarios: una fila por cuenta, proceso y día local. Si dos instancias de la
+// API intentan correrlo, la segunda choca con la clave única y no hace nada.
+model DailyJobRun {
+  id         Int       @id @default(autoincrement())
+  accountId  Int
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  job        String    @db.VarChar(40)
+  runDate    DateTime  @db.Date
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  notices    Int?
+  error      String?   @db.NVarChar(1000)
+
+  @@unique([accountId, job, runDate])
 }

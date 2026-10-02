@@ -28,6 +28,7 @@
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "admin:reset-2fa": "tsx scripts/admin-reset-2fa.ts",
+    "jobs:daily-notices": "tsx scripts/daily-notices.ts",
     "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/db-backup.ps1",
     "postinstall": "prisma generate",
     "prepare": "husky"

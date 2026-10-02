@@ -56,6 +56,7 @@ export const TENANT_MODELS = new Set([
   'InventoryMaintenance',
   'InventoryLoan',
   'Notification',
+  'DailyJobRun',
 ]);
 
 /** relación -> { fk, modelo padre } */

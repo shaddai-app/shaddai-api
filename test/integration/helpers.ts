@@ -18,6 +18,7 @@ export const NEW_STRONG_PASSWORD = 'montaña-violeta-tranvía-azul';
 export async function resetDb() {
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
+  await prisma.dailyJobRun.deleteMany();
   await prisma.eventRegistration.deleteMany(); // antes que los movimientos (pagos)
   await prisma.movementAttachment.deleteMany();
   await prisma.financeMovement.deleteMany();
