@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../http/errors.js';
 import { logger } from '../logger.js';
+import { reportError } from '../observability/sentry.js';
 
 export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({ error: { code: 'ROUTE_NOT_FOUND' } });
@@ -37,5 +38,6 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     }
   }
   logger.error({ err, requestId: req.id }, 'Unhandled error');
+  reportError(err);
   res.status(500).json({ error: { code: 'INTERNAL_ERROR' } });
 };

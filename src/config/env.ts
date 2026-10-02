@@ -67,6 +67,11 @@ const EnvSchema = z
     JOBS_ENABLED: bool('true'),
     DAILY_NOTICES_HOUR: z.coerce.number().int().min(0).max(23).default(8),
 
+    // Sentry: errores no previstos (sin DSN no se envía nada). Release = commit desplegado.
+    SENTRY_DSN: optional(z.url()),
+    SENTRY_ENVIRONMENT: optional(z.string()),
+    SENTRY_RELEASE: optional(z.string()),
+
     // Cloudflare Turnstile para formularios públicos. Sin secreto (solo fuera de producción) no se verifica.
     TURNSTILE_SECRET: z.string().optional(),
     TURNSTILE_SITE_KEY: z.string().optional(),

@@ -65,6 +65,9 @@ Decidido el **2 de octubre de 2026** (Fase 8). Los precios son aproximados a esa
 - **Logins SQL separados**: uno para migrar (crea tablas) y otro para la app (solo lee y escribe datos). Se arma en el tramo 4.
 - **Mail**: en producción `MAIL_TRANSPORT` tiene que ser `smtp`; la API no arranca con `console`.
 - **Turnstile**: `TURNSTILE_SECRET` es obligatorio en producción.
+- **Sentry**: un proyecto para la API (`SENTRY_DSN`) y otro para la web (`VITE_SENTRY_DSN`, se fija al compilar). `SENTRY_RELEASE` / `VITE_SENTRY_RELEASE` = commit desplegado. No se mandan datos personales; ver [seguridad.md](seguridad.md).
+- **Headers de la web**: el build genera `dist/staticwebapp.config.json` con la CSP. La CSP permite conectarse solo a la API y a Sentry configurados _al compilar_: si cambia el dominio de la API, hay que recompilar.
+- **Dependabot**: abre PRs una vez por mes. Revisarlas como cualquier otra (CI completo antes de mergear).
 - **Secretos**: nunca en el repo. Van en los secretos de Container Apps y de GitHub Actions. Las variables están documentadas en `.env.example`.
 
 ## Registros DNS (cuando haya dominio)
@@ -95,7 +98,7 @@ Los CNAME hacia Azure van con el proxy de Cloudflare **apagado** (nube gris), as
 ### Lo hace Claude en el código (Fase 8)
 
 - [x] Tramo 1: rate limit compartido en la base y driver S3/R2 (shaddai-app/shaddai-api#27).
-- [ ] Tramo 2: Sentry en la API y la web, headers de seguridad y CSP, revisión OWASP ASVS L1.
+- [x] Tramo 2: Sentry en la API y la web, headers de seguridad y CSP, revisión OWASP ASVS L1 ([seguridad.md](seguridad.md)), gitleaks, `npm audit` y Dependabot en CI.
 - [ ] Tramo 3: páginas de privacidad y términos, exportación de datos de la iglesia, baja de cuenta con purga a los 90 días.
 - [ ] Tramo 4: Dockerfile, deploy desde CI a staging y producción, logins SQL de migración y de app, backup y restauración probada, configuración de DNS y mail.
 

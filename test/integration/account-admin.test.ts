@@ -342,6 +342,9 @@ describe('logo y archivos', () => {
     const file = await api().get(`/api/v1/files/${fileId}`).set(member.headers);
     expect(file.status).toBe(200);
     expect(file.headers['content-type']).toBe('image/webp');
+    // Abierto directo en el navegador no puede ejecutar nada en el origen de la API.
+    expect(file.headers['content-security-policy']).toContain('sandbox');
+    expect(file.headers['x-content-type-options']).toBe('nosniff');
     const meta = await sharp(file.body as Buffer).metadata();
     expect(Math.max(meta.width!, meta.height!)).toBeLessThanOrEqual(512);
 

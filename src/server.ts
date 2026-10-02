@@ -2,8 +2,10 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { prisma } from './core/db/prisma.js';
 import { logger } from './core/logger.js';
+import { flushSentry, initSentry } from './core/observability/sentry.js';
 import { startJobs } from './jobs/scheduler.js';
 
+initSentry();
 const server = createApp().listen(env.PORT, () => {
   logger.info(`Shaddai API escuchando en http://localhost:${env.PORT}/api/v1`);
 });
@@ -14,6 +16,7 @@ async function shutdown(signal: string) {
   stopJobs();
   server.close();
   await prisma.$disconnect();
+  await flushSentry();
   process.exit(0);
 }
 
