@@ -1,14 +1,19 @@
 import { rateLimit, type Options } from 'express-rate-limit';
-import { env } from '../../config/env.js';
+import { env, rateLimitStore } from '../../config/env.js';
+import { DbRateLimitStore } from '../db/rate-limit-store.js';
 
-// Store en memoria: suficiente con una instancia. Con varias (Fase 8) pasa a store compartido.
-function limiter(windowMs: number, limit: number, overrides: Partial<Options> = {}) {
+// Con una sola instancia alcanza el store en memoria; con varias (producción) se cuenta en la base,
+// así el límite es por IP y no por IP e instancia. Cada limitador tiene su propio prefijo.
+function limiter(name: string, windowMs: number, limit: number, overrides: Partial<Options> = {}) {
   return rateLimit({
     windowMs,
     limit,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: () => !env.RATE_LIMIT_ENABLED,
+    store: rateLimitStore === 'db' ? new DbRateLimitStore(name) : undefined,
+    // Si la base no responde, se deja pasar: el límite protege, pero no debe tirar la API.
+    passOnStoreError: true,
     handler: (_req, res, _next, options) => {
       res.status(options.statusCode).json({ error: { code: 'RATE_LIMITED' } });
     },
@@ -17,19 +22,19 @@ function limiter(windowMs: number, limit: number, overrides: Partial<Options> = 
 }
 
 /** Login y verificación 2FA: 10 intentos por minuto por IP (el bloqueo por usuario va aparte). */
-export const loginLimiter = limiter(60_000, 10);
+export const loginLimiter = limiter('login', 60_000, 10);
 
 /** Olvidé / reset de contraseña: 5 cada 15 minutos por IP. */
-export const passwordResetLimiter = limiter(15 * 60_000, 5);
+export const passwordResetLimiter = limiter('password', 15 * 60_000, 5);
 
 /** Refresh: holgado (varias pestañas), pero corta abusos. */
-export const refreshLimiter = limiter(60_000, 60);
+export const refreshLimiter = limiter('refresh', 60_000, 60);
 
 /** Formularios públicos (Soy nuevo): 5 envíos cada 10 minutos por IP. */
-export const publicFormLimiter = limiter(10 * 60_000, 5);
+export const publicFormLimiter = limiter('public-form', 10 * 60_000, 5);
 
 /** Lecturas públicas (configuración del formulario, logo). */
-export const publicReadLimiter = limiter(60_000, 60);
+export const publicReadLimiter = limiter('public-read', 60_000, 60);
 
 /** Resto de la API autenticada. */
-export const apiLimiter = limiter(60_000, 300);
+export const apiLimiter = limiter('api', 60_000, 300);

@@ -76,3 +76,13 @@ model DailyJobRun {
 
   @@unique([accountId, job, runDate])
 }
+
+// Contadores del rate limit compartidos entre instancias de la API (sin cuenta: se cuentan por IP).
+// Las filas vencidas se reinician en el próximo golpe y el programador borra las viejas.
+model RateLimitHit {
+  key     String   @id @db.VarChar(200)
+  hits    Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

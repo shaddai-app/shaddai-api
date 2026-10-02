@@ -14,6 +14,10 @@ const csv = z.string().transform((v) =>
     .filter(Boolean),
 );
 
+/** Variable vacía en el .env (`X=`) = sin definir. */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+
 const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -38,9 +42,17 @@ const EnvSchema = z
       .string()
       .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOTP_ENC_KEY debe ser 32 bytes en base64'),
     RATE_LIMIT_ENABLED: bool('true'),
+    // memory: una sola instancia · db: contadores compartidos en SQL Server (por defecto en producción)
+    RATE_LIMIT_STORE: optional(z.enum(['memory', 'db'])),
 
-    STORAGE_DRIVER: z.enum(['local']).default('local'), // Fase 8: 'r2'
+    // local: carpeta del servidor · s3: bucket compatible con S3 (Cloudflare R2 en producción)
+    STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
     STORAGE_LOCAL_PATH: z.string().default('./storage'),
+    S3_ENDPOINT: optional(z.url()), // R2: https://<cuenta>.r2.cloudflarestorage.com
+    S3_REGION: z.string().default('auto'),
+    S3_BUCKET: z.string().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
 
     // console: loguea el mail (dev sin SMTP) · smtp: envío real · memory: tests
     MAIL_TRANSPORT: z.enum(['console', 'smtp', 'memory']).default('console'),
@@ -67,7 +79,19 @@ const EnvSchema = z
   .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
     message: 'TURNSTILE_SECRET es obligatorio en producción',
     path: ['TURNSTILE_SECRET'],
-  });
+  })
+  // En producción el mail sale por SMTP: "console" escribiría en el log los enlaces de recuperación.
+  .refine((e) => e.NODE_ENV !== 'production' || e.MAIL_TRANSPORT === 'smtp', {
+    message: 'MAIL_TRANSPORT debe ser smtp en producción',
+    path: ['MAIL_TRANSPORT'],
+  })
+  .refine(
+    (e) => e.STORAGE_DRIVER !== 's3' || Boolean(e.S3_BUCKET && e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY),
+    {
+      message: 'Con STORAGE_DRIVER=s3 hacen falta S3_BUCKET, S3_ACCESS_KEY_ID y S3_SECRET_ACCESS_KEY',
+      path: ['S3_BUCKET'],
+    },
+  );
 
 export type Env = z.infer<typeof EnvSchema>;
 
@@ -82,3 +106,4 @@ function loadEnv(): Env {
 
 export const env = loadEnv();
 export const isProd = env.NODE_ENV === 'production';
+export const rateLimitStore = env.RATE_LIMIT_STORE ?? (isProd ? 'db' : 'memory');
