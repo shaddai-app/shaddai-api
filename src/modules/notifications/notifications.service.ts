@@ -56,15 +56,25 @@ export const emailsSettled = () => Promise.allSettled([...pending]).then(() => u
 
 /**
  * Crea el aviso para cada usuario (activo, de la cuenta actual) según sus preferencias. Devuelve
- * cuántos se guardaron en la app. `link` es una ruta del front ("/mis-turnos").
+ * a cuántos les llegó (en la app o por mail). `link` es una ruta del front ("/mis-turnos").
+ * Con `dedupeKey`, a quien ya recibió ese aviso no se le repite (proceso diario).
  */
 export async function notify(input: {
   userIds: number[];
   type: NotificationType;
   params: NotificationParams;
   link: string;
+  dedupeKey?: string;
 }): Promise<number> {
-  const ids = [...new Set(input.userIds)];
+  let ids = [...new Set(input.userIds)];
+  if (input.dedupeKey && ids.length) {
+    const already = await tenantDb().notification.findMany({
+      where: { userId: { in: ids }, dedupeKey: input.dedupeKey },
+      select: { userId: true },
+    });
+    const done = new Set(already.map((n) => n.userId));
+    ids = ids.filter((id) => !done.has(id));
+  }
   if (!ids.length) return 0;
   const accountId = currentAccountId();
   const db = tenantDb();
@@ -79,16 +89,24 @@ export async function notify(input: {
   let saved = 0;
   for (const user of users) {
     const prefs = parsePrefs(user.notificationPrefs)[input.type];
-    const row = prefs.inApp
-      ? await db.notification.create({
-          data: { accountId, userId: user.id, type: input.type, params, link: input.link },
-          select: { id: true },
-        })
-      : null;
-    if (row) saved++;
+    if (!prefs.inApp && !prefs.email) continue;
+    // Con el aviso apagado en la app igual queda la fila (oculta): registra el mail y evita repetirlo.
+    const row = await db.notification.create({
+      data: {
+        accountId,
+        userId: user.id,
+        type: input.type,
+        params,
+        link: input.link,
+        inApp: prefs.inApp,
+        dedupeKey: input.dedupeKey ?? null,
+      },
+      select: { id: true },
+    });
+    saved++;
     if (prefs.email) {
       const locale = resolveMailLocale(user.locale, account.defaultLocale);
-      const job = deliver(row?.id ?? null, user.email, locale, input.type, input.params, input.link);
+      const job = deliver(row.id, user.email, locale, input.type, input.params, input.link);
       pending.add(job);
       void job.finally(() => pending.delete(job));
     }
@@ -97,7 +115,7 @@ export async function notify(input: {
 }
 
 async function deliver(
-  notificationId: number | null,
+  notificationId: number,
   to: string,
   locale: ReturnType<typeof resolveMailLocale>,
   type: NotificationType,
@@ -144,7 +162,7 @@ const parseParams = (raw: string | null): NotificationParams => {
 
 export async function listNotifications(userId: number, q: z.infer<typeof ListQuery>) {
   const db = tenantDb();
-  const where = { userId, ...(q.unread ? { readAt: null } : {}) };
+  const where = { userId, inApp: true, ...(q.unread ? { readAt: null } : {}) };
   const [rows, total, unread] = await Promise.all([
     db.notification.findMany({
       where,
@@ -153,26 +171,32 @@ export async function listNotifications(userId: number, q: z.infer<typeof ListQu
       ...toSkipTake(q),
     }),
     db.notification.count({ where }),
-    db.notification.count({ where: { userId, readAt: null } }),
+    db.notification.count({ where: { userId, inApp: true, readAt: null } }),
   ]);
   const items = rows.map((r) => ({ ...r, params: parseParams(r.params) }));
   return { ...paged(items, total, q), unread };
 }
 
 export async function unreadCount(userId: number) {
-  return { count: await tenantDb().notification.count({ where: { userId, readAt: null } }) };
+  return { count: await tenantDb().notification.count({ where: { userId, inApp: true, readAt: null } }) };
 }
 
 export async function markRead(userId: number, id: number) {
   const db = tenantDb();
-  const found = await db.notification.findFirst({ where: { id, userId }, select: { readAt: true } });
+  const found = await db.notification.findFirst({
+    where: { id, userId, inApp: true },
+    select: { readAt: true },
+  });
   if (!found) throw AppError.notFound('NOTIFICATION_NOT_FOUND');
   if (!found.readAt) await db.notification.update({ where: { id }, data: { readAt: new Date() } });
   return unreadCount(userId);
 }
 
 export async function markAllRead(userId: number) {
-  await tenantDb().notification.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
+  await tenantDb().notification.updateMany({
+    where: { userId, inApp: true, readAt: null },
+    data: { readAt: new Date() },
+  });
   return { count: 0 };
 }
 
