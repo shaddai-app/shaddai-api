@@ -31,6 +31,7 @@ export async function resetDb() {
   await prisma.announcementAudience.deleteMany();
   await prisma.announcement.deleteMany();
   await prisma.rateLimitHit.deleteMany();
+  await prisma.platformLock.deleteMany();
   await prisma.eventRegistration.deleteMany(); // antes que los movimientos (pagos)
   await prisma.movementAttachment.deleteMany();
   await prisma.financeMovement.deleteMany();

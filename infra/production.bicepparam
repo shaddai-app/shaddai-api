@@ -34,6 +34,9 @@ param turnstileSecret = readEnvironmentVariable('TURNSTILE_SECRET')
 param turnstileSiteKey = readEnvironmentVariable('TURNSTILE_SITE_KEY')
 param sentryDsn = readEnvironmentVariable('SENTRY_DSN', '')
 
+// Iglesia demo (cuenta 1) para que los clientes prueben la app.
+param seedDemoPassword = readEnvironmentVariable('SEED_DEMO_PASSWORD')
+
 // Cobro con Mercado Pago: 'none' hasta tener las credenciales (los pagos se registran a mano).
 param billingProvider = 'none'
 param mpAccessToken = readEnvironmentVariable('MP_ACCESS_TOKEN', '')

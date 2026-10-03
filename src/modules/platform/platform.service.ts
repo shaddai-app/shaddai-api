@@ -10,6 +10,8 @@ import { sendMail } from '../../core/mail/mailer.js';
 import { resolveMailLocale, temporaryAccessMail } from '../../core/mail/templates.js';
 import { ADMIN_ROLE_KEY } from '../../core/rbac/resolve.js';
 import { applyAccountTemplate } from './account-template.js';
+import { DEMO_ACCOUNT_ID, DEMO_SLUG } from './demo/constants.js';
+import { lastDemoResetAt } from './demo/reset.service.js';
 import type {
   AccountStatus,
   AuditQuery,
@@ -76,16 +78,22 @@ export async function listAccounts(query: z.infer<typeof ListAccountsQuery>) {
   return paged(items, total, query);
 }
 
+const isDemoAccount = (a: { id: number; slug: string }) => a.id === DEMO_ACCOUNT_ID && a.slug === DEMO_SLUG;
+
 export async function getAccount(id: number) {
   const account = await prisma.account.findUnique({ where: { id }, include: { plan: true } });
   if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND');
-  const [activeUsers, admins] = await Promise.all([
+  const isDemo = isDemoAccount(account);
+  const [activeUsers, admins, lastReset] = await Promise.all([
     prisma.user.count({ where: { accountId: id, isActive: true, deletedAt: null } }),
     listAccountAdmins(id),
+    isDemo ? lastDemoResetAt() : null,
   ]);
   const { storageUsedBytes, ...rest } = account;
   return {
     ...rest,
+    isDemo,
+    lastDemoResetAt: lastReset,
     usage: { activeUsers, userLimit: account.userLimit, storageUsedMb: Number(storageUsedBytes) / 1_048_576 },
     admins,
   };
@@ -228,9 +236,16 @@ export async function updateAccount(id: number, input: z.infer<typeof UpdateAcco
 }
 
 export async function changeAccountStatus(id: number, input: z.infer<typeof ChangeStatusSchema>) {
-  const before = await prisma.account.findUnique({ where: { id }, select: { status: true } });
+  const before = await prisma.account.findUnique({
+    where: { id },
+    select: { id: true, slug: true, status: true },
+  });
   if (!before) throw AppError.notFound('ACCOUNT_NOT_FOUND');
   const status: AccountStatus = input.status;
+  // La demo existe siempre: no se suspende ni se da de baja (se restablece).
+  if (isDemoAccount(before) && (status === 'suspended' || status === 'closed')) {
+    throw AppError.conflict('DEMO_ACCOUNT_PROTECTED');
+  }
   const closing = status === 'closed';
 
   await prisma.account.update({

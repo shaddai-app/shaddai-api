@@ -86,6 +86,7 @@ $env:S3_SECRET_ACCESS_KEY = Read-Host 'R2 secret'
 $env:TURNSTILE_SECRET = Read-Host 'Turnstile secret'
 $env:TURNSTILE_SITE_KEY = '<site key de Turnstile>'
 $env:SENTRY_DSN = '<DSN de shaddai-api>'
+$env:SEED_DEMO_PASSWORD = Read-Host 'Contraseña de la iglesia demo (12+ caracteres)'
 # Solo con billingProvider = 'mercadopago' en el .bicepparam (si no, quedan vacías):
 $env:MP_ACCESS_TOKEN = Read-Host 'Access token de Mercado Pago'
 $env:MP_WEBHOOK_SECRET = Read-Host 'Secreto del webhook de Mercado Pago'
@@ -94,7 +95,7 @@ $env:MP_WEBHOOK_SECRET = Read-Host 'Secreto del webhook de Mercado Pago'
 Para generar los secretos nuevos (una vez por entorno y guardarlos en el gestor):
 
 ```powershell
-node -e "const c=require('crypto');console.log('JWT:',c.randomBytes(48).toString('base64url'));console.log('TOTP:',c.randomBytes(32).toString('base64'));for(const n of ['SQL admin','DB app','DB migrator'])console.log(n+':',c.randomBytes(18).toString('base64url')+'aA1!')"
+node -e "const c=require('crypto');console.log('JWT:',c.randomBytes(48).toString('base64url'));console.log('TOTP:',c.randomBytes(32).toString('base64'));for(const n of ['SQL admin','DB app','DB migrator','Demo'])console.log(n+':',c.randomBytes(18).toString('base64url')+'aA1!')"
 ```
 
 Completar en `infra/<entorno>.bicepparam` los valores con `TU-DOMINIO` (por PR, no son secretos) y aplicar:
@@ -129,6 +130,8 @@ az containerapp job start -g shaddai-staging -n shaddai-staging-migrate
 ```
 
 El seed crea el superadmin con `SEED_SUPERADMIN_EMAIL` **sin imprimir contraseña** (los logs del job quedan guardados). Para entrar: `https://app-staging.TU-DOMINIO.com/olvide-contrasena` → llega el enlace por mail → definir la contraseña → enrolar la verificación en dos pasos.
+
+El mismo seed crea la **iglesia demo** (`iglesia-demo`, usuarios `demo-*@shaddai.local` con `SEED_DEMO_PASSWORD`). Tiene que ser la **cuenta 1**: por eso esta primera migración corre antes de dar de alta cualquier iglesia real. Si el job avisa que quedó con otro id, el restablecimiento no la va a encontrar. Para dejarla como nueva todos los días: Plataforma → Iglesias → Iglesia Demo → **Restablecer demo** (pide el mail del admin demo y `SEED_DEMO_PASSWORD`).
 
 ## 4. Dominios
 

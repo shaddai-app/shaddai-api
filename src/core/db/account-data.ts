@@ -110,24 +110,39 @@ export async function exportAccountRecord(accountId: number) {
 }
 
 /**
- * Borra definitivamente una iglesia: binarios, todas sus filas, su auditoría y la cuenta. Es
- * idempotente: si se corta a mitad de camino, la próxima pasada sigue desde donde quedó.
+ * Borra todos los datos de una iglesia (binarios, filas y su auditoría) sin borrar la cuenta. Los
+ * usuarios de `keepUserIds` quedan (desvinculados de su persona): el restablecimiento de la demo
+ * conserva así sus ids. Es idempotente: si se corta, la próxima pasada sigue desde donde quedó.
  */
-export async function purgeAccount(accountId: number): Promise<{ files: number; rows: number }> {
+export async function wipeAccountData(
+  accountId: number,
+  { keepUserIds = [] }: { keepUserIds?: number[] } = {},
+): Promise<{ files: number; rows: number }> {
   const db = tenantClientFor(accountId);
   const files = await db.fileObject.findMany({ select: { storageKey: true } });
   for (const file of files) await storage.delete(file.storageKey);
-  // El logo de la cuenta apunta a un archivo que se borra antes que la cuenta.
+  // El logo de la cuenta apunta a un archivo que se borra.
   await prisma.account.updateMany({ where: { id: accountId }, data: { logoFileId: null } });
 
   // Las células se apuntan entre sí (multiplicación): se cortan antes de borrarlas.
   await db.cell.updateMany({ data: { parentCellId: null } });
+  if (keepUserIds.length)
+    await db.user.updateMany({ where: { id: { in: keepUserIds } }, data: { personId: null } });
   let rows = 0;
-  for (const { model } of ACCOUNT_DATA) rows += (await delegateOf(db, model).deleteMany({})).count;
+  for (const { model } of ACCOUNT_DATA) {
+    const where = model === 'User' && keepUserIds.length ? { id: { notIn: keepUserIds } } : {};
+    rows += (await delegateOf(db, model).deleteMany({ where })).count;
+  }
   rows += (await prisma.auditLog.deleteMany({ where: { accountId } })).count;
-  await prisma.account.deleteMany({ where: { id: accountId } });
-  logger.info({ accountId, files: files.length, rows }, 'account purged');
   return { files: files.length, rows };
+}
+
+/** Borra definitivamente una iglesia: todos sus datos y la cuenta. Idempotente. */
+export async function purgeAccount(accountId: number): Promise<{ files: number; rows: number }> {
+  const result = await wipeAccountData(accountId);
+  await prisma.account.deleteMany({ where: { id: accountId } });
+  logger.info({ accountId, ...result }, 'account purged');
+  return result;
 }
 
 /** Cuentas cerradas cuyo plazo de conservación ya venció. Lo llama el programador de procesos. */

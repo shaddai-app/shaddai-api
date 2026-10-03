@@ -1,12 +1,15 @@
 import { platformRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { authOf } from '../../core/middleware/authenticate.js';
+import { loginLimiter } from '../../core/middleware/rate-limit.js';
+import { resetDemoAccount } from './demo/reset.service.js';
 import { startImpersonation } from './impersonation.service.js';
 import {
   AccountUserParams,
   AuditQuery,
   ChangeStatusSchema,
   CreateAccountSchema,
+  DemoResetSchema,
   IdParam,
   ImpersonateSchema,
   ListAccountsQuery,
@@ -51,6 +54,12 @@ p.post('/platform/accounts/:id/admins/:userId/reset-password', async (req, res) 
   const { id, userId } = parse(AccountUserParams, req.params);
   const { sendAccessEmail } = parse(ResetAdminSchema, req.body ?? {});
   res.json(await platform.resetAdminPassword(id, userId, sendAccessEmail));
+});
+
+// Iglesia demo (cuenta 1): restablecer todos sus datos. Pide las credenciales de la demo; con el
+// límite del login porque valida una contraseña.
+p.post('/platform/demo/reset', loginLimiter, async (req, res) => {
+  res.json(await resetDemoAccount(parse(DemoResetSchema, req.body), authOf(req).userId));
 });
 
 // Planes

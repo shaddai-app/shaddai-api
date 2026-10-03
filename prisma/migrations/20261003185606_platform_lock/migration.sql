@@ -1,0 +1,24 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- CreateTable
+CREATE TABLE [dbo].[PlatformLock] (
+    [key] VARCHAR(50) NOT NULL,
+    [lockedUntil] DATETIME2 NOT NULL,
+    [createdAt] DATETIME2 NOT NULL CONSTRAINT [PlatformLock_createdAt_df] DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT [PlatformLock_pkey] PRIMARY KEY CLUSTERED ([key])
+);
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH
