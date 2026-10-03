@@ -11,6 +11,8 @@ import { tenantClientFor } from './tenant.js';
 export const ACCOUNT_DATA: readonly { model: string; export: boolean }[] = [
   { model: 'Notification', export: false },
   { model: 'DailyJobRun', export: false },
+  { model: 'PrayerRequestPrayer', export: true },
+  { model: 'PrayerRequest', export: true },
   { model: 'AnnouncementAudience', export: true },
   { model: 'Announcement', export: true },
   { model: 'EventRegistration', export: true },

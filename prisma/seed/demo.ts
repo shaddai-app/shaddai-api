@@ -42,6 +42,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoLoans(prisma, existing.id);
     await seedDemoNotifications(prisma, existing.id);
     await seedDemoAnnouncements(prisma, existing.id);
+    await seedDemoPrayerRequests(prisma, existing.id);
     return;
   }
 
@@ -98,6 +99,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoLoans(prisma, account.id);
   await seedDemoNotifications(prisma, account.id);
   await seedDemoAnnouncements(prisma, account.id);
+  await seedDemoPrayerRequests(prisma, account.id);
 }
 
 /**
@@ -1165,6 +1167,68 @@ async function seedDemoAnnouncements(prisma: PrismaClient, accountId: number) {
     },
   });
   console.log('✔ Anuncios de ejemplo');
+}
+
+/** Peticiones de oración de ejemplo: públicas (una anónima y una respondida) y una para pastores. */
+async function seedDemoPrayerRequests(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.prayerRequest.count({ where: { accountId } })) > 0) return;
+  const users = await prisma.user.findMany({
+    where: {
+      accountId,
+      email: { in: ['demo-pastor@shaddai.local', 'demo-tesorero@shaddai.local', 'demo-lider@shaddai.local'] },
+    },
+  });
+  const user = (email: string) => users.find((u) => u.email === email)!.id;
+  const pastor = user('demo-pastor@shaddai.local');
+  const treasurer = user('demo-tesorero@shaddai.local');
+  const leader = user('demo-lider@shaddai.local');
+  const day = 86_400_000;
+  const now = Date.now();
+  const request = (data: Omit<Prisma.PrayerRequestUncheckedCreateInput, 'accountId'>, prayedBy: number[]) =>
+    prisma.prayerRequest.create({
+      data: { accountId, ...data, prayers: { create: prayedBy.map((userId) => ({ userId })) } },
+    });
+  await request(
+    {
+      createdById: treasurer,
+      visibility: 'public',
+      body: 'Por la salud de mi mamá: la operan el jueves. Gracias por orar.',
+      createdAt: new Date(now - day),
+    },
+    [pastor, leader],
+  );
+  await request(
+    {
+      createdById: leader,
+      visibility: 'public',
+      anonymous: true,
+      body: 'Por mi familia, para que haya paz en casa.',
+      createdAt: new Date(now - 3 * day),
+    },
+    [pastor],
+  );
+  await request(
+    {
+      createdById: leader,
+      visibility: 'public',
+      body: 'Por trabajo: hace dos meses que estoy buscando.',
+      status: 'answered',
+      answeredAt: new Date(now - 2 * day),
+      testimony: '¡Empiezo el lunes en un trabajo nuevo! Gracias a todos por orar.',
+      createdAt: new Date(now - 20 * day),
+    },
+    [pastor, treasurer],
+  );
+  await request(
+    {
+      createdById: treasurer,
+      visibility: 'pastors',
+      body: 'Necesito consejo por una situación delicada en el trabajo. ¿Podemos hablar esta semana?',
+      createdAt: new Date(now - 2 * day),
+    },
+    [],
+  );
+  console.log('✔ Peticiones de oración de ejemplo');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

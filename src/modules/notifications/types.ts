@@ -210,6 +210,61 @@ export const NOTIFICATION_TYPES = {
       },
     },
   },
+  // Petición de oración para el líder de célula del autor o para los pastores. El texto de la
+  // petición no va en el aviso ni en el mail: se lee en Shaddai.
+  'prayer.request': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => `Petición de oración de ${s(p.author)}`,
+        body: (p) => [
+          p.visibility === 'leader'
+            ? `${s(p.author)}, de tu célula, te compartió una petición de oración.`
+            : `${s(p.author)} compartió una petición de oración con los pastores.`,
+        ],
+        action: 'Leer la petición',
+      },
+      en: {
+        subject: (p) => `Prayer request from ${s(p.author)}`,
+        body: (p) => [
+          p.visibility === 'leader'
+            ? `${s(p.author)}, from your cell, shared a prayer request with you.`
+            : `${s(p.author)} shared a prayer request with the pastors.`,
+        ],
+        action: 'Read the request',
+      },
+      pt: {
+        subject: (p) => `Pedido de oração de ${s(p.author)}`,
+        body: (p) => [
+          p.visibility === 'leader'
+            ? `${s(p.author)}, da sua célula, compartilhou um pedido de oração com você.`
+            : `${s(p.author)} compartilhou um pedido de oração com os pastores.`,
+        ],
+        action: 'Ler o pedido',
+      },
+    },
+  },
+  // Al autor, la primera vez que alguien marca "Estoy orando" en su petición.
+  'prayer.praying': {
+    email: false,
+    mail: {
+      es: {
+        subject: (p) => `${s(p.person)} está orando por vos`,
+        body: (p) => [`${s(p.person)} está orando por tu petición.`],
+        action: 'Ver la petición',
+      },
+      en: {
+        subject: (p) => `${s(p.person)} is praying for you`,
+        body: (p) => [`${s(p.person)} is praying for your request.`],
+        action: 'See the request',
+      },
+      pt: {
+        subject: (p) => `${s(p.person)} está orando por você`,
+        body: (p) => [`${s(p.person)} está orando pelo seu pedido.`],
+        action: 'Ver o pedido',
+      },
+    },
+  },
 } satisfies Record<string, TypeDef>;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

@@ -1,0 +1,36 @@
+// Peticiones de oración. La visibilidad define quién la ve además de su autor y de quien tiene
+// oracion.pastoral: public = toda la iglesia; pastors = nadie más; leader = el líder y colíder de la
+// célula del autor (se calcula al leer: si cambia de célula, la ve su líder nuevo). anonymous solo
+// aplica a las públicas: oculta el nombre a los demás miembros, no a los pastores.
+model PrayerRequest {
+  id          Int                   @id @default(autoincrement())
+  accountId   Int
+  account     Account               @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  body        String                @db.NVarChar(1000)
+  visibility  String                @db.VarChar(10) // public|pastors|leader
+  anonymous   Boolean               @default(false)
+  status      String                @default("open") @db.VarChar(10) // open|answered
+  answeredAt  DateTime?
+  testimony   String?               @db.NVarChar(1000)
+  createdById Int
+  createdBy   User                  @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  deletedAt   DateTime?
+  prayers     PrayerRequestPrayer[]
+
+  @@index([accountId, status, createdAt])
+  @@index([accountId, createdById])
+}
+
+// "Estoy orando": uno por usuario y petición.
+model PrayerRequestPrayer {
+  requestId Int
+  request   PrayerRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  userId    Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt DateTime      @default(now())
+
+  @@id([requestId, userId])
+  @@index([userId])
+}

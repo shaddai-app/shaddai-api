@@ -36,6 +36,8 @@ model User {
   notifications       Notification[]
   totpRecoveryCodes   TotpRecoveryCode[]
   announcements       Announcement[]
+  prayerRequests      PrayerRequest[]
+  prayingFor          PrayerRequestPrayer[]
 
   @@index([accountId, isActive])
   @@index([personId])
