@@ -1,0 +1,60 @@
+// Discipulado / escuela bíblica: cursos con niveles ordenados (ej. Escuela de líderes: Nivel 1, 2 y 3)
+// y las inscripciones de cada persona a un nivel. Al completar el último nivel, si el curso tiene
+// un hito asociado (catálogo "milestone"), se le carga a la persona.
+model Course {
+  id              Int           @id @default(autoincrement())
+  accountId       Int
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name            String        @db.NVarChar(100)
+  description     String?       @db.NVarChar(500)
+  milestoneTypeId Int?
+  milestoneType   CatalogItem?  @relation("CourseMilestone", fields: [milestoneTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  levels          CourseLevel[]
+
+  @@index([accountId, isActive])
+}
+
+model CourseLevel {
+  id              Int                @id @default(autoincrement())
+  accountId       Int
+  courseId        Int
+  course          Course             @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name            String             @db.NVarChar(100)
+  description     String?            @db.NVarChar(500)
+  sortOrder       Int
+  // Quien da el nivel: con alcance "propio" en discipulado ve y gestiona solo sus niveles.
+  teacherPersonId Int?
+  teacher         Person?            @relation("CourseTeacher", fields: [teacherPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  enrollments     CourseEnrollment[]
+
+  @@index([accountId, courseId])
+  @@index([accountId, teacherPersonId])
+}
+
+// Una persona en un nivel. Puede volver a inscribirse después de una baja (una sola activa por nivel:
+// lo valida el servicio).
+model CourseEnrollment {
+  id          Int         @id @default(autoincrement())
+  accountId   Int
+  levelId     Int
+  level       CourseLevel @relation(fields: [levelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId    Int
+  person      Person      @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status      String      @default("active") @db.VarChar(10) // active|completed|dropped
+  enrolledAt  DateTime    @db.Date
+  completedAt DateTime?   @db.Date
+  droppedAt   DateTime?   @db.Date
+  notes       String?     @db.NVarChar(500)
+  createdById Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([accountId, levelId, status])
+  @@index([accountId, personId])
+}

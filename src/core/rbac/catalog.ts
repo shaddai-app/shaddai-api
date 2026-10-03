@@ -48,6 +48,7 @@ const definitions = {
   inventario: { ver: false, gestionar: false, prestamos: false },
   anuncios: { gestionar: false },
   oracion: { pastoral: false },
+  discipulado: { ver: true, gestionar: false, inscribir: true },
   usuarios: { ver: false, gestionar: false, resetear: false },
   roles: { ver: false, gestionar: false },
   cuenta: { configurar: false },

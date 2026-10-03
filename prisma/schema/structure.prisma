@@ -37,6 +37,7 @@ model CatalogItem {
   milestones        PersonMilestone[]     @relation("Milestone")
   positions         PersonPosition[]      @relation("Position")
   inventoryItems    InventoryItem[]       @relation("InventoryCategory")
+  courses           Course[]              @relation("CourseMilestone")
 
   @@index([accountId, type])
   // Unicidad de (accountId, type, systemKey) no nulo: la valida el servicio. Un índice filtrado manual

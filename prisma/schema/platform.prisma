@@ -57,6 +57,7 @@ model Account {
   cells                Cell[]
   announcements        Announcement[]
   prayerRequests       PrayerRequest[]
+  courses              Course[]
   cellReports          CellReport[]
   cellMultiplications  CellMultiplication[]
   consolidationSteps   ConsolidationStep[]

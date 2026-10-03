@@ -59,6 +59,9 @@ export const TENANT_MODELS = new Set([
   'DailyJobRun',
   'Announcement',
   'PrayerRequest',
+  'Course',
+  'CourseLevel',
+  'CourseEnrollment',
 ]);
 
 /** relación -> { fk, modelo padre } */
