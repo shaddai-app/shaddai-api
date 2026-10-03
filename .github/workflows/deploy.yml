@@ -1,0 +1,119 @@
+name: Deploy
+
+# Imágenes en cada merge a main (GHCR, con el sha del commit como tag). Publicación en Azure:
+# - staging: automática después de cada merge;
+# - producción: a mano (Actions → Deploy → Run workflow), con el sha que ya se probó en staging.
+# La publicación queda apagada hasta que la variable de repositorio DEPLOY_ENABLED sea 'true'
+# (ver docs/deploy.md: recursos de Azure, identidad de GitHub y variables de cada entorno).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Entorno
+        type: choice
+        options: [staging, production]
+        default: staging
+      ref:
+        description: Commit (sha completo) a publicar; vacío = el último de main
+        required: false
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # login en Azure con OIDC, sin secretos guardados
+
+env:
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/shaddai-api
+  MIGRATOR_IMAGE: ghcr.io/${{ github.repository_owner }}/shaddai-api-migrator
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - id: tag
+        run: echo "tag=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: API
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: |
+            ${{ env.API_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ github.event_name == 'push' && format('{0}:main', env.API_IMAGE) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Job de migraciones
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: migrator
+          push: true
+          tags: |
+            ${{ env.MIGRATOR_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ github.event_name == 'push' && format('{0}:main', env.MIGRATOR_IMAGE) || '' }}
+          cache-from: type=gha
+
+  deploy:
+    needs: images
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      TAG: ${{ needs.images.outputs.tag }}
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      PREFIX: shaddai-${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Migraciones y seed (antes de cambiar la API)
+        run: |
+          az containerapp job update -g "$RG" -n "$PREFIX-migrate" --image "$MIGRATOR_IMAGE:$TAG" -o none
+          execution=$(az containerapp job start -g "$RG" -n "$PREFIX-migrate" --query name -o tsv)
+          echo "Ejecución: $execution"
+          for i in $(seq 1 90); do
+            status=$(az containerapp job execution show -g "$RG" -n "$PREFIX-migrate" \
+              --job-execution-name "$execution" --query properties.status -o tsv)
+            echo "$status"
+            case "$status" in
+              Succeeded) exit 0 ;;
+              Failed|Stopped|Degraded) echo "::error::Las migraciones fallaron: ver los logs del job en Azure"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Las migraciones no terminaron en 15 minutos"; exit 1
+
+      - name: API
+        run: |
+          az containerapp update -g "$RG" -n "$PREFIX-api" --image "$API_IMAGE:$TAG" \
+            --set-env-vars SENTRY_RELEASE="$TAG" -o none
+
+      - name: La API nueva responde
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "${{ vars.API_URL }}/api/v1/health/ready"; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "::error::La API no respondió /health/ready"; exit 1

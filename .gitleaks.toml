@@ -1,0 +1,8 @@
+# Reglas de gitleaks del repo: las de siempre más una excepción. Los demás falsos positivos revisados
+# están uno por uno en .gitleaksignore.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Contraseña descartable del SQL Server efímero de los jobs de CI (solo existe dentro del CI)"
+regexes = ['''Ci-Strong-Passw0rd''']

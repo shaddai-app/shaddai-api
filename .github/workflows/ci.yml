@@ -85,3 +85,60 @@ jobs:
         run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
       - name: Tests de integración (base Shaddai_test)
         run: npm run test:int
+
+  image:
+    # La imagen de producción: el job de migraciones crea una base vacía (migraciones + seed en modo
+    # producción) y la API arranca contra ella y responde /health/ready.
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2025-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Ci-Strong-Passw0rd
+          MSSQL_PID: Developer
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Ci-Strong-Passw0rd -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - name: Construir las imágenes
+        run: |
+          docker build --target migrator -t shaddai-api-migrator:ci .
+          docker build --target runtime -t shaddai-api:ci .
+      - name: Variables de producción de prueba
+        run: |
+          cat > ci.env <<'VARS'
+          NODE_ENV=production
+          DB_HOST=localhost
+          DB_PORT=1433
+          DB_NAME=ShaddaiImage
+          DB_USER=sa
+          DB_PASSWORD=Ci-Strong-Passw0rd
+          DB_ENCRYPT=true
+          DB_TRUST_SERVER_CERTIFICATE=true
+          APP_URL=https://app.example.com
+          CORS_ORIGINS=https://app.example.com
+          JWT_ACCESS_SECRET=ci-secret-ci-secret-ci-secret-ci-secret-ci-secret-ci-secret-ci-secret
+          TOTP_ENC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          SEED_SUPERADMIN_EMAIL=ci@shaddai.local
+          MAIL_TRANSPORT=smtp
+          TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+          JOBS_ENABLED=false
+          VARS
+      - name: Migraciones y seed desde la imagen, dos veces (idempotente)
+        run: |
+          docker run --rm --network host --env-file ci.env shaddai-api-migrator:ci | tee migrator.log
+          docker run --rm --network host --env-file ci.env shaddai-api-migrator:ci
+          # En producción la contraseña del superadmin no se imprime (los logs del job quedan guardados).
+          ! grep -q "Contraseña temporal" migrator.log
+      - name: La API arranca y la base responde
+        run: |
+          docker run -d --name api --network host --env-file ci.env shaddai-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/api/v1/health/ready; then echo; exit 0; fi
+            sleep 2
+          done
+          docker logs api
+          exit 1

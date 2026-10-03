@@ -30,6 +30,13 @@ export async function seedSuperadmin(prisma: PrismaClient) {
     throw new Error(`El superadmin quedó con Id=${user.id} (se esperaba 1). Recreá la base con db:reset.`);
   }
 
+  // En producción el seed corre en un job cuyos logs quedan guardados: la contraseña no se imprime.
+  // El superadmin la define con "Olvidé mi contraseña" (le llega el enlace por mail).
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`✔ Superadmin creado (Id=1, ${email}). Definí la contraseña desde "Olvidé mi contraseña".`);
+    return;
+  }
+
   console.log('');
   console.log('══════════════════════════════════════════════════════════');
   console.log(' Superadmin creado (Id=1)');

@@ -1,0 +1,15 @@
+# Solo entra a la imagen lo que se copia explícitamente; esto evita mandar al build secretos y pesos muertos.
+.git
+.github
+.husky
+node_modules
+dist
+coverage
+storage
+backups
+test
+docs
+infra
+.env
+.env.*
+*.log

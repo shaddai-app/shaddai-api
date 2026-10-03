@@ -31,7 +31,8 @@
     "jobs:daily-notices": "tsx scripts/daily-notices.ts",
     "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/db-backup.ps1",
     "postinstall": "prisma generate",
-    "prepare": "husky"
+    "prepare": "husky",
+    "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/db-restore.ps1"
   },
   "lint-staged": {
     "*.{ts,js,mjs}": [
