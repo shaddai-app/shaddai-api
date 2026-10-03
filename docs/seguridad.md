@@ -58,12 +58,12 @@ Estados: ✅ cumple · ⏳ pendiente con fecha o tramo · ➖ no aplica.
 
 ## V8 Protección de datos
 
-| Control                                       | Estado | Cómo                                                                  |
-| --------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| Respuestas con datos personales no se cachean | ✅     | `Cache-Control: no-store` en toda la API                              |
-| Fotos sin metadatos                           | ✅     | Se recodifican a webp sin EXIF ni GPS (`core/files/files.service.ts`) |
-| Archivos privados                             | ✅     | Bucket privado; se sirven por la API con permiso por tipo de archivo  |
-| Exportación y baja de cuenta con purga        | ⏳     | Tramo 3 de la Fase 8                                                  |
+| Control                                       | Estado | Cómo                                                                                                                                             |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Respuestas con datos personales no se cachean | ✅     | `Cache-Control: no-store` en toda la API                                                                                                         |
+| Fotos sin metadatos                           | ✅     | Se recodifican a webp sin EXIF ni GPS (`core/files/files.service.ts`)                                                                            |
+| Archivos privados                             | ✅     | Bucket privado; se sirven por la API con permiso por tipo de archivo                                                                             |
+| Exportación y baja de cuenta con purga        | ✅     | ZIP completo sin credenciales (`/account/export`, auditado); baja solo del dueño con contraseña; purga a los 90 días (`core/db/account-data.ts`) |
 
 ## V9 Comunicaciones
 
@@ -112,3 +112,4 @@ Estados: ✅ cumple · ⏳ pendiente con fecha o tramo · ➖ no aplica.
 - ⏳ **Escaneo dinámico** (OWASP ZAP baseline) contra staging: tramo 4, cuando haya entorno publicado.
 - ⏳ **Registro de lectura de fichas sensibles**: después de la beta.
 - ⏳ **2FA optativo para todos los usuarios**: Fase 9.
+- ⏳ **Texto legal** de la política de privacidad y los términos: borrador en la web, pendiente de revisión por un abogado (Ley 25.326).

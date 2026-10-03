@@ -36,5 +36,8 @@ export const publicFormLimiter = limiter('public-form', 10 * 60_000, 5);
 /** Lecturas públicas (configuración del formulario, logo). */
 export const publicReadLimiter = limiter('public-read', 60_000, 60);
 
+/** Exportación completa de la iglesia (pesada): 3 por hora. */
+export const exportLimiter = limiter('export', 60 * 60_000, 3);
+
 /** Resto de la API autenticada. */
 export const apiLimiter = limiter('api', 60_000, 300);

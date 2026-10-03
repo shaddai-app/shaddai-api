@@ -64,6 +64,9 @@ Decidido el **2 de octubre de 2026** (Fase 8). Los precios son aproximados a esa
 - **Bucket de R2 privado**, sin acceso público: los archivos se sirven siempre por la API, que controla permisos.
 - **Logins SQL separados**: uno para migrar (crea tablas) y otro para la app (solo lee y escribe datos). Se arma en el tramo 4.
 - **Mail**: en producción `MAIL_TRANSPORT` tiene que ser `smtp`; la API no arranca con `console`.
+- **Contacto de soporte**: `SUPPORT_EMAIL` (API, mail de baja) y `VITE_SUPPORT_EMAIL` (web, política de privacidad y términos) tienen que ser una casilla real que alguien lea.
+- **Baja de una iglesia**: la pide el dueño de la cuenta desde Configuración → Datos de la iglesia. La cuenta queda cerrada (nadie entra) y el programador la **borra definitivamente a los 90 días**: datos, archivos del bucket y auditoría. Para revertirla antes, el superadmin la reactiva desde el panel de plataforma (vuelve a `active` y se cancela la purga).
+- **Backups y purga**: los backups de Azure SQL conservan datos hasta 35 días después de la purga. Así lo tiene que decir la política de privacidad.
 - **Turnstile**: `TURNSTILE_SECRET` es obligatorio en producción.
 - **Sentry**: un proyecto para la API (`SENTRY_DSN`) y otro para la web (`VITE_SENTRY_DSN`, se fija al compilar). `SENTRY_RELEASE` / `VITE_SENTRY_RELEASE` = commit desplegado. No se mandan datos personales; ver [seguridad.md](seguridad.md).
 - **Headers de la web**: el build genera `dist/staticwebapp.config.json` con la CSP. La CSP permite conectarse solo a la API y a Sentry configurados _al compilar_: si cambia el dominio de la API, hay que recompilar.
@@ -99,7 +102,7 @@ Los CNAME hacia Azure van con el proxy de Cloudflare **apagado** (nube gris), as
 
 - [x] Tramo 1: rate limit compartido en la base y driver S3/R2 (shaddai-app/shaddai-api#27).
 - [x] Tramo 2: Sentry en la API y la web, headers de seguridad y CSP, revisión OWASP ASVS L1 ([seguridad.md](seguridad.md)), gitleaks, `npm audit` y Dependabot en CI.
-- [ ] Tramo 3: páginas de privacidad y términos, exportación de datos de la iglesia, baja de cuenta con purga a los 90 días.
+- [x] Tramo 3: páginas de privacidad y términos (borrador), exportación de datos de la iglesia, baja de cuenta con purga a los 90 días.
 - [ ] Tramo 4: Dockerfile, deploy desde CI a staging y producción, logins SQL de migración y de app, backup y restauración probada, configuración de DNS y mail.
 
 ## Pendientes de decidir
