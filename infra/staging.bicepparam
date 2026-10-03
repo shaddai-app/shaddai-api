@@ -33,3 +33,8 @@ param s3SecretAccessKey = readEnvironmentVariable('S3_SECRET_ACCESS_KEY')
 param turnstileSecret = readEnvironmentVariable('TURNSTILE_SECRET')
 param turnstileSiteKey = readEnvironmentVariable('TURNSTILE_SITE_KEY')
 param sentryDsn = readEnvironmentVariable('SENTRY_DSN', '')
+
+// Cobro con Mercado Pago: 'none' hasta tener las credenciales (los pagos se registran a mano).
+param billingProvider = 'none'
+param mpAccessToken = readEnvironmentVariable('MP_ACCESS_TOKEN', '')
+param mpWebhookSecret = readEnvironmentVariable('MP_WEBHOOK_SECRET', '')

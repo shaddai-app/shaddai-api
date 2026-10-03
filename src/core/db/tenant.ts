@@ -63,6 +63,8 @@ export const TENANT_MODELS = new Set([
   'CourseLevel',
   'CourseEnrollment',
   'CourseSession',
+  'Subscription',
+  'Invoice',
 ]);
 
 /** relación -> { fk, modelo padre } */

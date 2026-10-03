@@ -67,6 +67,14 @@ param turnstileSiteKey string
 @secure()
 param sentryDsn string = ''
 
+@description('Cobro del servicio: mercadopago o none (pagos registrados a mano).')
+@allowed(['mercadopago', 'none'])
+param billingProvider string = 'none'
+@secure()
+param mpAccessToken string = ''
+@secure()
+param mpWebhookSecret string = ''
+
 param geocodingProvider string = 'none'
 @secure()
 param geocodingApiKey string = ''
@@ -192,6 +200,9 @@ var commonEnv = [
   { name: 'SENTRY_ENVIRONMENT', value: environment }
   { name: 'GEOCODING_PROVIDER', value: geocodingProvider }
   { name: 'GEOCODING_API_KEY', secretRef: 'geocoding-api-key' }
+  { name: 'BILLING_PROVIDER', value: billingProvider }
+  { name: 'MP_ACCESS_TOKEN', secretRef: 'mp-access-token' }
+  { name: 'MP_WEBHOOK_SECRET', secretRef: 'mp-webhook-secret' }
 ]
 
 var commonSecrets = [
@@ -205,6 +216,8 @@ var commonSecrets = [
   // Container Apps no acepta secretos vacíos: sin Sentry o geocodificador se guarda un espacio.
   { name: 'sentry-dsn', value: empty(sentryDsn) ? ' ' : sentryDsn }
   { name: 'geocoding-api-key', value: empty(geocodingApiKey) ? ' ' : geocodingApiKey }
+  { name: 'mp-access-token', value: empty(mpAccessToken) ? ' ' : mpAccessToken }
+  { name: 'mp-webhook-secret', value: empty(mpWebhookSecret) ? ' ' : mpWebhookSecret }
 ]
 
 var registries = [

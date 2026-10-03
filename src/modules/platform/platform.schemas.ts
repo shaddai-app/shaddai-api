@@ -95,6 +95,8 @@ export const PlanSchema = z
     userLimit: z.number().int().min(1).max(10_000),
     storageLimitMb: z.number().int().min(0).max(1_000_000),
     priceUsd: z.number().min(0).max(100_000),
+    // Precio mensual en pesos del débito automático; sin precio, la iglesia no puede suscribirse.
+    priceArs: z.number().min(0).max(100_000_000).nullable().optional(),
     isActive: z.boolean().default(true),
   })
   .strict();

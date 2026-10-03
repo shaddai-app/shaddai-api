@@ -6,6 +6,7 @@ import { logger } from '../core/logger.js';
 import { reportError } from '../core/observability/sentry.js';
 import { publishDueAnnouncements } from '../modules/announcements/announcements.service.js';
 import { runDailyNotices } from '../modules/notifications/daily.js';
+import { markPastDue } from '../modules/billing/billing.service.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
 // pasaron la hora del aviso diario en su zona horaria; la traba en la base evita correrlo dos veces
@@ -55,6 +56,17 @@ export async function tickAnnouncements(now = new Date()) {
   }
 }
 
+/** Cuentas activas con el pago vencido (más los días de gracia): pasan a morosas. */
+export async function markOverdueAccounts(now = new Date()) {
+  try {
+    const changed = await markPastDue(now);
+    if (changed.length) logger.info({ accountIds: changed }, 'accounts marked past due');
+  } catch (err) {
+    logger.error({ err }, 'billing past-due check failed');
+    reportError(err, { job: 'billing-past-due' });
+  }
+}
+
 /** Borra definitivamente las iglesias dadas de baja hace más de 90 días. */
 export async function purgeClosedAccounts(now = new Date()) {
   try {
@@ -76,6 +88,7 @@ export function startJobs(): () => void {
       await tickDailyNotices();
       await tickAnnouncements();
       await purgeExpiredRateLimits();
+      await markOverdueAccounts();
       await purgeClosedAccounts();
     } catch (err) {
       logger.error({ err }, 'jobs tick failed');
