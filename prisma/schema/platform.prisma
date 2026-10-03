@@ -1,12 +1,15 @@
 model Plan {
-  id             Int       @id @default(autoincrement())
-  code           String    @unique @db.VarChar(30) // basic | standard | pro
-  name           String    @db.NVarChar(80)
+  id             Int            @id @default(autoincrement())
+  code           String         @unique @db.VarChar(30) // basic | standard | pro
+  name           String         @db.NVarChar(80)
   userLimit      Int
   storageLimitMb Int
-  priceUsd       Decimal   @db.Decimal(10, 2)
-  isActive       Boolean   @default(true)
+  priceUsd       Decimal        @db.Decimal(10, 2)
+  // Precio mensual en pesos para el débito automático (Mercado Pago Argentina). Sin precio, no se cobra.
+  priceArs       Decimal?       @db.Decimal(12, 2)
+  isActive       Boolean        @default(true)
   accounts       Account[]
+  subscriptions  Subscription[]
 }
 
 model Account {
@@ -20,6 +23,8 @@ model Account {
   storageLimitMb     Int
   storageUsedBytes   BigInt    @default(0)
   trialEndsAt        DateTime?
+  // Pagado hasta: lo extiende cada cobro aprobado. Vencido (más los días de gracia) pasa a past_due.
+  paidUntil          DateTime?
   defaultLocale      String    @default("es") @db.VarChar(5)
   timezone           String    @default("America/Argentina/Buenos_Aires") @db.VarChar(50)
   currency           String    @default("ARS") @db.Char(3)
@@ -83,6 +88,8 @@ model Account {
   inventoryLoans       InventoryLoan[]
   notifications        Notification[]
   dailyJobRuns         DailyJobRun[]
+  subscriptions        Subscription[]
+  invoices             Invoice[]
 
   @@index([status])
 }

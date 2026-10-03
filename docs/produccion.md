@@ -68,10 +68,42 @@ Decidido el **2 de octubre de 2026** (Fase 8). Los precios son aproximados a esa
 - **Baja de una iglesia**: la pide el dueño de la cuenta desde Configuración → Datos de la iglesia. La cuenta queda cerrada (nadie entra) y el programador la **borra definitivamente a los 90 días**: datos, archivos del bucket y auditoría. Para revertirla antes, el superadmin la reactiva desde el panel de plataforma (vuelve a `active` y se cancela la purga).
 - **Backups y purga**: los backups de Azure SQL conservan datos hasta 35 días después de la purga. Así lo tiene que decir la política de privacidad.
 - **Turnstile**: `TURNSTILE_SECRET` es obligatorio en producción.
+- **Cobro (Mercado Pago)**: ver la sección [Cobro del servicio](#cobro-del-servicio-mercado-pago). Mientras no estén las credenciales, `BILLING_PROVIDER=none` y los pagos se registran a mano desde el panel de plataforma. `fake` no arranca en producción.
 - **Sentry**: un proyecto para la API (`SENTRY_DSN`) y otro para la web (`VITE_SENTRY_DSN`, se fija al compilar). `SENTRY_RELEASE` / `VITE_SENTRY_RELEASE` = commit desplegado. No se mandan datos personales; ver [seguridad.md](seguridad.md).
 - **Headers de la web**: el build genera `dist/staticwebapp.config.json` con la CSP. La CSP permite conectarse solo a la API y a Sentry configurados _al compilar_: si cambia el dominio de la API, hay que recompilar.
 - **Dependabot**: abre PRs una vez por mes. Revisarlas como cualquier otra (CI completo antes de mergear).
 - **Secretos**: nunca en el repo. Van en los secretos de Container Apps y de GitHub Actions. Las variables están documentadas en `.env.example`.
+
+## Cobro del servicio (Mercado Pago)
+
+Cómo funciona (código en `src/modules/billing`):
+
+- **Suscripción.** La iglesia se suscribe desde Administración → Facturación (`/admin/facturacion`, permiso `cuenta.configurar`). Se crea un débito automático mensual (suscripción "preapproval") por el precio en pesos del plan (`Plan.priceArs`). Quien paga va al checkout de Mercado Pago y vuelve a la página de facturación.
+  - Funciona aunque la cuenta esté en solo lectura (prueba vencida o morosa): justamente es para poder pagar.
+- **Cobros.** Cada cobro aprobado extiende `Account.paidUntil` un mes, desde donde terminaba el anterior. Si la cuenta estaba en prueba o morosa, pasa a activa.
+  - Un rechazo queda registrado y no cambia nada.
+  - Una devolución se registra pero no descuenta días: lo decide la plataforma.
+- **Morosidad.** El proceso de la API pasa a `past_due` (solo lectura) a la cuenta activa cuyo `paidUntil` venció hace más de `BILLING_GRACE_DAYS` (5 por defecto), y avisa a los dueños por la app y por mail. Las cuentas activadas a mano, sin `paidUntil`, no se tocan.
+- **Pagos a mano.** Transferencia o efectivo: el superadmin los registra en la ficha de la iglesia en el panel de plataforma (meses que cubre, importe, nota). Extiende `paidUntil` igual que un cobro.
+- **Webhook.** `POST https://api.TU-DOMINIO/api/v1/webhooks/billing`.
+  - Se valida la firma `x-signature` con `MP_WEBHOOK_SECRET`.
+  - Después se consulta el recurso a la API de Mercado Pago: nunca se confía en el cuerpo del aviso.
+  - Es idempotente, porque Mercado Pago reintenta.
+
+Puesta en marcha (la hace el dueño con Claude):
+
+1. Crear la cuenta de Mercado Pago (vendedor, Argentina) y una aplicación en "Tus integraciones" con el producto **Suscripciones**.
+2. **Sandbox primero.**
+   - Con las credenciales de prueba, en staging: `BILLING_PROVIDER=mercadopago`, `MP_ACCESS_TOKEN` (token de prueba) y `MP_WEBHOOK_SECRET`.
+   - Configurar el webhook en el panel con la URL de arriba y los eventos _Planes y suscripciones_ y _Pagos_.
+   - Probar con un usuario comprador de prueba: suscribirse, ver el cobro aprobado, cancelar.
+   - **Hay que validar en este paso**:
+     - cómo informa Mercado Pago a qué suscripción pertenece cada cobro;
+     - que la firma coincida.
+
+     El código toma la suscripción del cobro (`preapproval_id`, `subscription_id`) o, si no viene, la `external_reference`.
+3. Cargar en el panel de plataforma el **precio en pesos** de cada plan. Sin precio, la iglesia no se puede suscribir.
+4. **Producción**: las mismas variables con las credenciales de producción, en los secretos de Container Apps.
 
 ## Registros DNS (cuando haya dominio)
 
@@ -96,7 +128,8 @@ Los CNAME hacia Azure van con el proxy de Cloudflare **apagado** (nube gris), as
 - [ ] Crear la cuenta de Sentry (plan Developer gratuito).
 - [ ] Activar R2 en la cuenta de Cloudflare (pide medio de pago aunque el uso chico sea gratis).
 - [ ] Revisar con un abogado la política de privacidad y los términos (Ley 25.326) antes de abrir la beta.
-- [ ] Definir precios de los planes Básico, Estándar y Pro.
+- [ ] Definir precios de los planes Básico, Estándar y Pro (en dólares de referencia y en pesos para el débito).
+- [ ] Crear la cuenta de Mercado Pago y la aplicación con Suscripciones; pasar las credenciales de prueba y luego las de producción (ver [Cobro del servicio](#cobro-del-servicio-mercado-pago)).
 
 ### Lo hace Claude en el código (Fase 8)
 

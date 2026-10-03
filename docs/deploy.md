@@ -86,6 +86,9 @@ $env:S3_SECRET_ACCESS_KEY = Read-Host 'R2 secret'
 $env:TURNSTILE_SECRET = Read-Host 'Turnstile secret'
 $env:TURNSTILE_SITE_KEY = '<site key de Turnstile>'
 $env:SENTRY_DSN = '<DSN de shaddai-api>'
+# Solo con billingProvider = 'mercadopago' en el .bicepparam (si no, quedan vacías):
+$env:MP_ACCESS_TOKEN = Read-Host 'Access token de Mercado Pago'
+$env:MP_WEBHOOK_SECRET = Read-Host 'Secreto del webhook de Mercado Pago'
 ```
 
 Para generar los secretos nuevos (una vez por entorno y guardarlos en el gestor):

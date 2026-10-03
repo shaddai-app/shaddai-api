@@ -25,4 +25,8 @@ export class AppError extends Error {
   static conflict(code = 'CONFLICT', details?: unknown) {
     return new AppError(409, code, undefined, details);
   }
+  /** Falló un servicio externo (ej. el proveedor de cobros). */
+  static badGateway(code = 'BAD_GATEWAY') {
+    return new AppError(502, code);
+  }
 }

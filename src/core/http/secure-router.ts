@@ -32,15 +32,16 @@ type Register = (path: string, access: TenantAccess, ...handlers: RequestHandler
 /**
  * Router de negocio: no se puede registrar un endpoint sin declarar su permiso. Encadena
  * autenticación → usuario de cuenta → (escrituras) cuenta no en solo lectura → permiso.
+ * `allowReadOnly`: sus escrituras también funcionan con la cuenta en solo lectura (ej. pagar).
  */
-export function tenantRouter() {
+export function tenantRouter(options: { allowReadOnly?: boolean } = {}) {
   const router = Router();
   const register =
     (method: Method): Register =>
     (path, access, ...handlers) => {
       routeRegistry.push({ scope: 'tenant', method, path, access });
       const guards: RequestHandler[] = [authenticate(), requireAccountUser];
-      if (method !== 'get') guards.push(requireWritableAccount);
+      if (method !== 'get' && !options.allowReadOnly) guards.push(requireWritableAccount);
       if (access !== 'account-user')
         guards.push(requirePermission(...([] as PermissionKey[]).concat(access)));
       router[method](path, ...guards, ...handlers);

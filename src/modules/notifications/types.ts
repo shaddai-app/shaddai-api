@@ -244,6 +244,36 @@ export const NOTIFICATION_TYPES = {
       },
     },
   },
+  // A los dueños de la cuenta: venció el pago (más los días de gracia) y quedó en solo lectura.
+  'billing.past_due': {
+    email: true,
+    mail: {
+      es: {
+        subject: () => 'Shaddai: venció el pago de tu iglesia',
+        body: (p, f) => [
+          `El servicio estaba pagado hasta el ${f.date(p.paidUntil)} y no registramos un pago nuevo.`,
+          'La cuenta quedó en solo lectura: se puede consultar todo, pero no cargar ni editar. Al pagar, vuelve a funcionar enseguida.',
+        ],
+        action: 'Ver facturación',
+      },
+      en: {
+        subject: () => 'Shaddai: your church’s payment is overdue',
+        body: (p, f) => [
+          `The service was paid until ${f.date(p.paidUntil)} and we haven’t received a new payment.`,
+          'The account is now read-only: everything can be viewed but not added or edited. It works again as soon as you pay.',
+        ],
+        action: 'See billing',
+      },
+      pt: {
+        subject: () => 'Shaddai: o pagamento da sua igreja venceu',
+        body: (p, f) => [
+          `O serviço estava pago até ${f.date(p.paidUntil)} e não registramos um novo pagamento.`,
+          'A conta ficou somente leitura: dá para consultar tudo, mas não cadastrar nem editar. Ao pagar, volta a funcionar na hora.',
+        ],
+        action: 'Ver faturamento',
+      },
+    },
+  },
   // Al autor, la primera vez que alguien marca "Estoy orando" en su petición.
   'prayer.praying': {
     email: false,

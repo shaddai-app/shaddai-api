@@ -82,6 +82,15 @@ const EnvSchema = z
     GEOCODING_PROVIDER: z.enum(['none', 'locationiq', 'geoapify']).default('none'),
     GEOCODING_API_KEY: optional(z.string()),
     GEOCODING_COUNTRY: z.string().length(2).default('ar'),
+
+    // Cobro del servicio: fake (desarrollo y tests, sin dinero real) | mercadopago | none (sin cobro
+    // automático: la plataforma registra los pagos a mano).
+    // Sin valor: fake en desarrollo y tests, none en producción (ver billingProviderName).
+    BILLING_PROVIDER: optional(z.enum(['none', 'fake', 'mercadopago'])),
+    MP_ACCESS_TOKEN: optional(z.string()),
+    MP_WEBHOOK_SECRET: optional(z.string()),
+    /** Días después de vencido el pago antes de pasar la cuenta a "morosa" (solo lectura). */
+    BILLING_GRACE_DAYS: z.coerce.number().int().min(0).max(60).default(5),
   })
   .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
     message: 'TURNSTILE_SECRET es obligatorio en producción',
@@ -91,6 +100,14 @@ const EnvSchema = z
   .refine((e) => e.NODE_ENV !== 'production' || e.MAIL_TRANSPORT === 'smtp', {
     message: 'MAIL_TRANSPORT debe ser smtp en producción',
     path: ['MAIL_TRANSPORT'],
+  })
+  .refine((e) => e.NODE_ENV !== 'production' || e.BILLING_PROVIDER !== 'fake', {
+    message: 'BILLING_PROVIDER=fake no se usa en producción (mercadopago o none)',
+    path: ['BILLING_PROVIDER'],
+  })
+  .refine((e) => e.BILLING_PROVIDER !== 'mercadopago' || Boolean(e.MP_ACCESS_TOKEN && e.MP_WEBHOOK_SECRET), {
+    message: 'Con BILLING_PROVIDER=mercadopago hacen falta MP_ACCESS_TOKEN y MP_WEBHOOK_SECRET',
+    path: ['MP_ACCESS_TOKEN'],
   })
   .refine(
     (e) => e.STORAGE_DRIVER !== 's3' || Boolean(e.S3_BUCKET && e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY),
@@ -114,3 +131,4 @@ function loadEnv(): Env {
 export const env = loadEnv();
 export const isProd = env.NODE_ENV === 'production';
 export const rateLimitStore = env.RATE_LIMIT_STORE ?? (isProd ? 'db' : 'memory');
+export const billingProviderName = env.BILLING_PROVIDER ?? (isProd ? 'none' : 'fake');

@@ -12,6 +12,11 @@ import { apiLimiter } from './core/middleware/rate-limit.js';
 import { accountDataRouter } from './modules/account/account-data.routes.js';
 import { announcementsRouter } from './modules/announcements/announcements.routes.js';
 import { prayerRouter } from './modules/prayer/prayer.routes.js';
+import {
+  billingRouter,
+  billingWebhookRouter,
+  platformBillingRouter,
+} from './modules/billing/billing.routes.js';
 import { coursesRouter } from './modules/courses/courses.routes.js';
 import { accountRouter } from './modules/account/account.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
@@ -91,6 +96,7 @@ export function createApp() {
   });
   api.use(healthRouter);
   api.use(publicRouter); // sin sesión, con sus propios límites
+  api.use(billingWebhookRouter); // sin sesión: lo autentica la firma del proveedor
   api.use(apiLimiter);
   api.use(authRouter);
   api.use(meRouter);
@@ -120,7 +126,9 @@ export function createApp() {
   api.use(rolesRouter);
   api.use(accountRouter);
   api.use(accountDataRouter);
+  api.use(billingRouter);
   api.use(platformRoutes);
+  api.use(platformBillingRouter);
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

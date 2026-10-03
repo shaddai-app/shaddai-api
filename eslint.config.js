@@ -29,8 +29,10 @@ export default tseslint.config(
     // queda para core/, auth, me (datos del propio usuario) y el panel de plataforma.
     files: ['src/modules/**/*.ts'],
     // public: busca la iglesia por slug antes de que haya cuenta en contexto; escribe con tenantClientFor.
+    // billing: el webhook, el proceso diario y la plataforma operan sobre cualquier cuenta.
     ignores: [
       'src/modules/auth/**',
+      'src/modules/billing/**',
       'src/modules/me/**',
       'src/modules/health/**',
       'src/modules/platform/**',
