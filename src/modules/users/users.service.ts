@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { audit } from '../../core/audit/audit.js';
 import { generateTemporaryPassword, hashPassword } from '../../core/auth/password.js';
 import { currentAccountId, tenantDb } from '../../core/db/tenant.js';
+import { isDemoAccount, isDemoUserEmail } from '../../core/demo.js';
 import { AppError } from '../../core/http/errors.js';
 import { paged, toSkipTake } from '../../core/http/pagination.js';
 import { sendMail } from '../../core/mail/mailer.js';
@@ -34,7 +35,7 @@ const userSelect = {
 
 type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>;
 
-const present = (u: UserRow) => {
+const present = (u: UserRow, demo = false) => {
   const { roles, lockedUntil, person, ...rest } = u;
   return {
     ...rest,
@@ -46,12 +47,23 @@ const present = (u: UserRow) => {
     lockedUntil,
     roles: roles.map((r) => r.role),
     isAdmin: roles.some((r) => r.role.systemKey === ADMIN_ROLE_KEY && r.role.isLocked),
+    // Uno de los 4 usuarios compartidos de la demo: no se edita, desactiva ni resetea.
+    isDemoUser: demo && isDemoUserEmail(u.email),
   };
 };
 
 async function findUser(id: number): Promise<UserRow> {
   const user = await tenantDb().user.findFirst({ where: { id, deletedAt: null }, select: userSelect });
   if (!user) throw AppError.notFound('USER_NOT_FOUND');
+  return user;
+}
+
+/** Para modificarlo: los 4 usuarios demo los comparten todos los visitantes de la demo. */
+async function findEditableUser(id: number): Promise<UserRow> {
+  const user = await findUser(id);
+  if (isDemoUserEmail(user.email) && (await isDemoAccount(currentAccountId()))) {
+    throw AppError.forbidden('DEMO_ACTION_BLOCKED');
+  }
   return user;
 }
 
@@ -151,11 +163,19 @@ export async function listUsers(query: z.infer<typeof ListUsersQuery>) {
     db.user.count({ where }),
     usage(),
   ]);
-  return { ...paged(rows.map(present), total, query), usage: limits };
+  const demo = await isDemoAccount(currentAccountId());
+  return {
+    ...paged(
+      rows.map((r) => present(r, demo)),
+      total,
+      query,
+    ),
+    usage: limits,
+  };
 }
 
 export async function getUser(id: number) {
-  return present(await findUser(id));
+  return present(await findUser(id), await isDemoAccount(currentAccountId()));
 }
 
 export async function createUser(input: z.infer<typeof CreateUserSchema>) {
@@ -199,7 +219,7 @@ export async function createUser(input: z.infer<typeof CreateUserSchema>) {
 }
 
 export async function updateUser(actorId: number, id: number, input: z.infer<typeof UpdateUserSchema>) {
-  const before = await findUser(id);
+  const before = await findEditableUser(id);
   const db = tenantDb();
 
   if (input.roleIds) {
@@ -235,7 +255,7 @@ export async function updateUser(actorId: number, id: number, input: z.infer<typ
 }
 
 export async function setActive(actorId: number, id: number, active: boolean) {
-  const user = await findUser(id);
+  const user = await findEditableUser(id);
   if (user.isActive === active) return present(user);
   const db = tenantDb();
 
@@ -260,7 +280,7 @@ export async function setActive(actorId: number, id: number, active: boolean) {
 }
 
 export async function unlock(id: number) {
-  await findUser(id);
+  await findEditableUser(id);
   await tenantDb().user.update({
     where: { id },
     data: { lockedUntil: null, failedLoginCount: 0, lockoutLevel: 0 },
@@ -276,7 +296,7 @@ export async function unlock(id: number) {
  */
 export async function resetTwoFactor(actorId: number, id: number) {
   if (id === actorId) throw AppError.conflict('USE_SECURITY_SETTINGS'); // para uno mismo: Seguridad
-  const user = await findUser(id);
+  const user = await findEditableUser(id);
   if (!user.totpEnabled) throw AppError.conflict('TOTP_NOT_ENABLED');
   const db = tenantDb();
   await db.user.update({ where: { id }, data: { totpEnabled: false, totpSecretEnc: null } });
@@ -296,7 +316,7 @@ export async function resetTwoFactor(actorId: number, id: number) {
 
 export async function resetPassword(actorId: number, id: number, sendAccessEmail: boolean) {
   if (id === actorId) throw AppError.conflict('USE_CHANGE_PASSWORD'); // para uno mismo: cambio de contraseña
-  const user = await findUser(id);
+  const user = await findEditableUser(id);
   const temporaryPassword = generateTemporaryPassword();
   const db = tenantDb();
   await db.user.update({

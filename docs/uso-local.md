@@ -57,6 +57,16 @@ La iglesia demo es siempre la **cuenta 1** y es la que van a usar los clientes p
 
 La demo no se puede suspender ni dar de baja desde el panel.
 
+### Qué está bloqueado en la demo
+
+Como la contraseña es pública, la demo se puede recorrer entera pero no se puede romper para el próximo visitante:
+
+- los 4 usuarios demo no pueden cambiar su contraseña, activar 2FA ni cerrar sesiones, y desde Usuarios no se editan, desactivan ni resetean;
+- **la demo nunca manda mails** (ni invitaciones ni avisos), y "Olvidé mi contraseña" no hace nada para sus usuarios;
+- no se puede exportar, pedir la baja ni usar facturación.
+
+Todo lo demás se puede (cargar, editar y borrar datos, crear usuarios, tocar roles y configuración): el restablecimiento lo ordena. Arriba se ve la franja "Estás en la demo".
+
 ### Panel de plataforma (tu lado como dueño del SaaS)
 
 El superadmin (`SEED_SUPERADMIN_EMAIL`) entra al **panel de plataforma** en `/plataforma`. Ahí se dan de alta iglesias, se cambian planes y estados, se registran pagos y se ve la auditoría. Exige 2FA con una app de autenticación desde el primer ingreso.

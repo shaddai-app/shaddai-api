@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { billingProviderName } from '../../config/env.js';
 import { prisma } from '../../core/db/prisma.js';
+import { forbidInDemo } from '../../core/demo.js';
 import { AppError } from '../../core/http/errors.js';
 import { platformRouter, tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
@@ -22,17 +23,17 @@ t.get('/account/billing', 'cuenta.configurar', async (req, res) => {
   res.json(await billing.billingOverview(accountId(req)));
 });
 
-t.post('/account/billing/subscribe', 'cuenta.configurar', async (req, res) => {
+t.post('/account/billing/subscribe', 'cuenta.configurar', forbidInDemo, async (req, res) => {
   res.status(201).json(await billing.subscribe(authOf(req).userId, accountId(req)));
 });
 
-t.post('/account/billing/cancel', 'cuenta.configurar', async (req, res) => {
+t.post('/account/billing/cancel', 'cuenta.configurar', forbidInDemo, async (req, res) => {
   await billing.cancelSubscription(authOf(req).userId, accountId(req));
   res.json(await billing.billingOverview(accountId(req)));
 });
 
 /** Solo con el proveedor de prueba: simula el cobro del débito (como si llegara el aviso). */
-t.post('/account/billing/simulate-payment', 'cuenta.configurar', async (req, res) => {
+t.post('/account/billing/simulate-payment', 'cuenta.configurar', forbidInDemo, async (req, res) => {
   if (billingProviderName !== 'fake') throw AppError.notFound('NOT_FOUND');
   const { status } = parse(
     z.object({ status: z.enum(['approved', 'rejected']).default('approved') }).strict(),

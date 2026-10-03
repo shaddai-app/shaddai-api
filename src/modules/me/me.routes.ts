@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { audit } from '../../core/audit/audit.js';
 import { prisma } from '../../core/db/prisma.js';
+import { forbidForDemoUsers, isDemoAccount, isDemoUserEmail } from '../../core/demo.js';
 import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
 import { authenticate, authOf, forbidImpersonation } from '../../core/middleware/authenticate.js';
@@ -53,7 +54,13 @@ async function loadMe(userId: number) {
   });
   const { account, ...rest } = user;
   const totpRecoveryCodesLeft = user.totpEnabled ? await recoveryCodesLeft(userId) : 0;
-  return { user: { ...rest, totpRecoveryCodesLeft }, account };
+  // isDemo: el front muestra el aviso de demo y esconde lo que está bloqueado.
+  const isDemo = Boolean(account && (await isDemoAccount(account.id)));
+  return {
+    // isDemoUser: uno de los 4 usuarios compartidos (sin cambiar contraseña, 2FA ni sesiones).
+    user: { ...rest, totpRecoveryCodesLeft, isDemoUser: isDemo && isDemoUserEmail(rest.email) },
+    account: account && { ...account, isDemo },
+  };
 }
 
 // Permitido con sesión restringida: el front lo necesita para saber a qué pantalla mandar al usuario.
@@ -92,12 +99,18 @@ meRouter.get('/me/sessions', authenticate(), async (req, res) => {
   });
 });
 
-meRouter.delete('/me/sessions/:id', authenticate(), forbidImpersonation, async (req, res) => {
-  const { userId } = authOf(req);
-  const familyId = z.uuid().parse(req.params.id);
-  const owned = await prisma.refreshToken.findFirst({ where: { familyId, userId }, select: { id: true } });
-  if (!owned) throw AppError.notFound('SESSION_NOT_FOUND');
-  await revokeFamily(familyId, 'user_revoked');
-  await audit({ action: 'auth.session.revoke', entity: 'Session', entityId: familyId });
-  res.status(204).end();
-});
+meRouter.delete(
+  '/me/sessions/:id',
+  authenticate(),
+  forbidImpersonation,
+  forbidForDemoUsers,
+  async (req, res) => {
+    const { userId } = authOf(req);
+    const familyId = z.uuid().parse(req.params.id);
+    const owned = await prisma.refreshToken.findFirst({ where: { familyId, userId }, select: { id: true } });
+    if (!owned) throw AppError.notFound('SESSION_NOT_FOUND');
+    await revokeFamily(familyId, 'user_revoked');
+    await audit({ action: 'auth.session.revoke', entity: 'Session', entityId: familyId });
+    res.status(204).end();
+  },
+);

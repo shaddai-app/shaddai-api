@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { isProd } from '../../config/env.js';
 import { audit } from '../../core/audit/audit.js';
 import { hashToken } from '../../core/auth/tokens.js';
+import { forbidForDemoUsers } from '../../core/demo.js';
 import { prisma } from '../../core/db/prisma.js';
 import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
@@ -97,6 +98,7 @@ authRouter.post(
   '/auth/logout-all',
   authenticate({ allowRestricted: true }),
   forbidImpersonation,
+  forbidForDemoUsers,
   async (req, res) => {
     const { userId } = authOf(req);
     await revokeAllSessions(userId, 'logout_all');
@@ -110,6 +112,7 @@ authRouter.post(
   '/auth/change-password',
   authenticate({ allowRestricted: true }),
   forbidImpersonation,
+  forbidForDemoUsers,
   async (req, res) => {
     const { userId, sessionId } = authOf(req);
     sessionResponse(res, await auth.changePassword(userId, sessionId, parse(ChangePasswordSchema, req.body)));
@@ -130,6 +133,7 @@ authRouter.post(
   '/auth/2fa/enroll',
   authenticate({ allowRestricted: true }),
   forbidImpersonation,
+  forbidForDemoUsers,
   async (req, res) => {
     const { userId, restriction } = authOf(req);
     if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
@@ -149,6 +153,7 @@ authRouter.post(
   '/auth/2fa/confirm',
   authenticate({ allowRestricted: true }),
   forbidImpersonation,
+  forbidForDemoUsers,
   async (req, res) => {
     const { userId, sessionId, restriction } = authOf(req);
     if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
@@ -163,16 +168,24 @@ authRouter.post(
 
 // Desactivar la verificación en dos pasos y regenerar los códigos de recuperación: piden la
 // contraseña (y para desactivar, además, un código). Con el límite del login.
-authRouter.post('/auth/2fa/disable', loginLimiter, authenticate(), forbidImpersonation, async (req, res) => {
-  await auth.disableTotp(authOf(req).userId, parse(TotpDisableSchema, req.body));
-  res.status(204).end();
-});
+authRouter.post(
+  '/auth/2fa/disable',
+  loginLimiter,
+  authenticate(),
+  forbidImpersonation,
+  forbidForDemoUsers,
+  async (req, res) => {
+    await auth.disableTotp(authOf(req).userId, parse(TotpDisableSchema, req.body));
+    res.status(204).end();
+  },
+);
 
 authRouter.post(
   '/auth/2fa/recovery-codes',
   loginLimiter,
   authenticate(),
   forbidImpersonation,
+  forbidForDemoUsers,
   async (req, res) => {
     const { password } = parse(RecoveryCodesSchema, req.body);
     res.json(await auth.regenerateRecoveryCodes(authOf(req).userId, password));

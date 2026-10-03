@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 import { env } from '../../config/env.js';
+import { getContext } from '../context.js';
+import { isDemoAccount } from '../demo.js';
 import { logger } from '../logger.js';
 
 export interface MailMessage {
@@ -23,6 +25,12 @@ const smtp =
     : null;
 
 export async function sendMail(message: MailMessage): Promise<void> {
+  // La iglesia demo es pública: nunca manda mails (ni invitaciones ni avisos), para que no sirva de
+  // spam. Sin el destinatario en el log.
+  if (await isDemoAccount(getContext()?.accountId)) {
+    logger.info({ subject: message.subject }, 'mail skipped: demo account');
+    return;
+  }
   switch (env.MAIL_TRANSPORT) {
     case 'memory':
       memoryOutbox.push(message);
