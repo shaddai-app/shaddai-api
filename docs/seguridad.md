@@ -18,14 +18,15 @@ Estados: ✅ cumple · ⏳ pendiente con fecha o tramo · ➖ no aplica.
 
 ## V3 Sesiones
 
-| Control                                                        | Estado | Cómo                                                                                |
-| -------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------- |
-| Token de acceso corto y fuera del almacenamiento del navegador | ✅     | JWT de 15 minutos, solo en memoria                                                  |
-| Refresh en cookie `HttpOnly`, `Secure`, `SameSite=Strict`      | ✅     | `modules/auth/auth.routes.ts`                                                       |
-| Rotación del refresh y detección de reúso                      | ✅     | Un refresh reusado revoca toda la familia y queda auditado (`session.service.ts`)   |
-| Vencimiento absoluto                                           | ✅     | La familia no se extiende más allá del login original (7 o 30 días)                 |
-| Cerrar sesión y cambio de contraseña invalidan sesiones        | ✅     | Revocación de la familia; versión de contraseña dentro del JWT                      |
-| CSRF                                                           | ✅     | `SameSite=Strict` + header propio + control de `Origin` (`core/middleware/csrf.ts`) |
+| Control                                                        | Estado | Cómo                                                                                 |
+| -------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| Token de acceso corto y fuera del almacenamiento del navegador | ✅     | JWT de 15 minutos, solo en memoria                                                   |
+| Refresh en cookie `HttpOnly`, `Secure`, `SameSite=Strict`      | ✅     | `modules/auth/auth.routes.ts`                                                        |
+| Rotación del refresh y detección de reúso                      | ✅     | Un refresh reusado revoca toda la familia y queda auditado (`session.service.ts`)    |
+| Vencimiento absoluto                                           | ✅     | La familia no se extiende más allá del login original (7 o 30 días)                  |
+| Purga de sesiones vencidas                                     | ✅     | El programador borra las familias vencidas hace más de 7 días (`purgeRefreshTokens`) |
+| Cerrar sesión y cambio de contraseña invalidan sesiones        | ✅     | Revocación de la familia; versión de contraseña dentro del JWT                       |
+| CSRF                                                           | ✅     | `SameSite=Strict` + header propio + control de `Origin` (`core/middleware/csrf.ts`)  |
 
 ## V4 Control de acceso
 

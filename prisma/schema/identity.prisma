@@ -108,6 +108,7 @@ model RefreshToken {
 
   @@index([userId, revokedAt])
   @@index([familyId])
+  @@index([expiresAt]) // purga de vencidos (scheduler)
 }
 
 model PasswordResetToken {

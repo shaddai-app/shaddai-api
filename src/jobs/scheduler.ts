@@ -7,11 +7,13 @@ import { reportError } from '../core/observability/sentry.js';
 import { publishDueAnnouncements } from '../modules/announcements/announcements.service.js';
 import { runDailyNotices } from '../modules/notifications/daily.js';
 import { markPastDue } from '../modules/billing/billing.service.js';
+import { purgeExpiredRefreshTokens } from '../modules/auth/session.service.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
 // pasaron la hora del aviso diario en su zona horaria; la traba en la base evita correrlo dos veces
 // el mismo día, aunque haya varias instancias. También limpia los contadores vencidos del rate limit
-// y borra las iglesias dadas de baja cuyo plazo de conservación (90 días) ya venció.
+// y los refresh tokens vencidos, y borra las iglesias dadas de baja cuyo plazo de conservación (90 días)
+// ya venció.
 
 const EVERY_MS = 10 * 60_000;
 /** Cuentas que usan el sistema (no las suspendidas ni cerradas). */
@@ -78,6 +80,17 @@ export async function purgeClosedAccounts(now = new Date()) {
   }
 }
 
+/** Sesiones vencidas hace más de una semana (la demo pública genera muchas). */
+export async function purgeRefreshTokens(now = new Date()) {
+  try {
+    const purged = await purgeExpiredRefreshTokens(now);
+    if (purged) logger.info({ purged }, 'expired refresh tokens purged');
+  } catch (err) {
+    logger.error({ err }, 'refresh token purge failed');
+    reportError(err, { job: 'refresh-token-purge' });
+  }
+}
+
 /** Arranca los procesos programados; devuelve una función para detenerlos. */
 export function startJobs(): () => void {
   let running = false;
@@ -88,6 +101,7 @@ export function startJobs(): () => void {
       await tickDailyNotices();
       await tickAnnouncements();
       await purgeExpiredRateLimits();
+      await purgeRefreshTokens();
       await markOverdueAccounts();
       await purgeClosedAccounts();
     } catch (err) {
