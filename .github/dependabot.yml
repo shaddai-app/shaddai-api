@@ -1,5 +1,7 @@
 # Actualizaciones de dependencias una vez por mes, agrupadas, y solo versiones con al menos una semana
 # publicadas (cooldown): da tiempo a que aparezca un paquete comprometido antes de instalarlo.
+# Las versiones mayores de npm no se proponen solas: se actualizan a mano, leyendo qué cambia y con el
+# CI completo (ej. TypeScript queda en 6 hasta que typescript-eslint soporte 7; @types/node sigue a Node 24).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,6 +11,9 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       menores:
         update-types: [minor, patch]
