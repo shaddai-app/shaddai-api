@@ -150,7 +150,8 @@ describe('restablecimiento por un administrador de la iglesia', () => {
     expect(await prisma.totpRecoveryCode.count({ where: { userId: u.user.id } })).toBe(0);
     const login = await loginAs(u.user);
     expect(login.accessToken).toBeTruthy(); // entra solo con la contraseña
-    expect(memoryOutbox.some((m) => m.to === u.user.email && m.text.includes('restableció'))).toBe(true);
+    const resetMail = memoryOutbox.find((m) => m.to === u.user.email && m.text.includes('restableció'));
+    expect(resetMail?.text).toContain('Si no lo pediste'); // lo hizo un admin, no la persona
     expect(
       await prisma.auditLog.count({ where: { action: 'users.reset_2fa', entityId: String(u.user.id) } }),
     ).toBe(1);

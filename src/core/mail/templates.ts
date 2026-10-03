@@ -163,6 +163,7 @@ const securityCopy = {
         `Se entró a tu cuenta con un código de recuperación. Te quedan ${left}; si se te terminan, generá nuevos desde Seguridad.`,
     },
     notYou: 'Si no fuiste vos, cambiá tu contraseña ahora y avisale al administrador de tu iglesia.',
+    notRequested: 'Si no lo pediste, avisale al administrador de tu iglesia.',
     action: 'Revisar seguridad',
   },
   en: {
@@ -176,6 +177,7 @@ const securityCopy = {
         `Someone signed in to your account with a recovery code. You have ${left} left; if you run out, generate new ones from Security.`,
     },
     notYou: "If this wasn't you, change your password now and tell your church administrator.",
+    notRequested: "If you didn't ask for it, tell your church administrator.",
     action: 'Review security',
   },
   pt: {
@@ -189,6 +191,7 @@ const securityCopy = {
         `Alguém entrou na sua conta com um código de recuperação. Restam ${left}; se acabarem, gere novos em Segurança.`,
     },
     notYou: 'Se não foi você, troque sua senha agora e avise o administrador da sua igreja.',
+    notRequested: 'Se você não pediu, avise o administrador da sua igreja.',
     action: 'Revisar segurança',
   },
 } as const;
@@ -203,7 +206,8 @@ export function securityAlertMail(
     data.event === 'recovery_code_used'
       ? c.events.recovery_code_used(data.recoveryCodesLeft ?? 0)
       : c.events[data.event];
-  const paragraphs = [c.hello(data.name), event, c.notYou];
+  // El restablecimiento lo hace un administrador: la duda es si la persona lo pidió.
+  const paragraphs = [c.hello(data.name), event, data.event === 'totp_reset' ? c.notRequested : c.notYou];
   return {
     subject: c.subject,
     text: [...paragraphs, '', `${c.action}: ${data.url}`].join('\n'),
