@@ -185,6 +185,20 @@ export async function rotateRefreshToken(rawToken: string): Promise<IssuedSessio
   };
 }
 
+/** Se conservan una semana después de vencer (para investigar un incidente reciente). */
+export const REFRESH_PURGE_GRACE_DAYS = 7;
+
+/**
+ * Borra los refresh tokens vencidos hace más de una semana. Todos los de una familia comparten el
+ * vencimiento (la rotación lo copia), así que se van juntos: un token rotado sigue guardado mientras
+ * su familia esté vigente y la detección de reuso no se pierde.
+ */
+export async function purgeExpiredRefreshTokens(now = new Date()): Promise<number> {
+  const before = new Date(now.getTime() - REFRESH_PURGE_GRACE_DAYS * 86_400_000);
+  const { count } = await prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: before } } });
+  return count;
+}
+
 export async function revokeFamily(familyId: string, reason: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { familyId, revokedAt: null },
