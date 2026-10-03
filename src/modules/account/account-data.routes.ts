@@ -5,6 +5,7 @@ import { audit } from '../../core/audit/audit.js';
 import { verifyPassword } from '../../core/auth/password.js';
 import { ACCOUNT_DATA, exportAccountRecord, exportFileName, exportRows } from '../../core/db/account-data.js';
 import { currentAccountId, tenantDb } from '../../core/db/tenant.js';
+import { forbidInDemo } from '../../core/demo.js';
 import { AppError } from '../../core/http/errors.js';
 import { routeRegistry, tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
@@ -38,61 +39,72 @@ const readme = {
 
 // Todo lo de la iglesia en un ZIP: datos en JSON y archivos. Datos sensibles (diezmos, notas pastorales):
 // solo quien configura la cuenta, nunca en una sesión de soporte, y queda auditado.
-t.get('/account/export', 'cuenta.configurar', forbidImpersonation, exportLimiter, async (req, res) => {
-  const accountId = currentAccountId();
-  const { account, audit: auditRows } = await exportAccountRecord(accountId);
-  const today = new Date().toISOString().slice(0, 10);
-  await audit({ action: 'account.export', entity: 'Account', entityId: accountId });
+t.get(
+  '/account/export',
+  'cuenta.configurar',
+  forbidImpersonation,
+  forbidInDemo,
+  exportLimiter,
+  async (req, res) => {
+    const accountId = currentAccountId();
+    const { account, audit: auditRows } = await exportAccountRecord(accountId);
+    const today = new Date().toISOString().slice(0, 10);
+    await audit({ action: 'account.export', entity: 'Account', entityId: accountId });
 
-  res.attachment(`shaddai-${account.slug}-${today}.zip`).type('application/zip');
-  res.setHeader('Cache-Control', 'no-store');
-  const zip = new Zip((err, chunk, final) => {
-    if (err) {
-      logger.error({ err, accountId }, 'account export failed');
-      res.destroy(err);
-      return;
-    }
-    res.write(chunk);
-    if (final) res.end();
-  });
-  const add = (name: string, data: Uint8Array, compress = true) => {
-    const entry = compress ? new ZipDeflate(name, { level: 6 }) : new ZipPassThrough(name);
-    zip.add(entry);
-    entry.push(data, true);
-  };
-
-  try {
-    const locale = resolveMailLocale(account.defaultLocale);
-    add(
-      'LEEME.txt',
-      new TextEncoder().encode(readme[locale].replace('{church}', account.name).replace('{date}', today)),
-    );
-    add('datos/account.json', json(account));
-    add('datos/audit-log.json', json(auditRows));
-    for (const { model } of ACCOUNT_DATA.filter((d) => d.export)) {
-      add(`datos/${exportFileName(model)}`, json(await exportRows(accountId, model)));
-    }
-    const files = await tenantDb().fileObject.findMany({
-      where: { deletedAt: null },
-      orderBy: { id: 'asc' },
-    });
-    for (const file of files) {
-      try {
-        // Imágenes y PDF ya vienen comprimidos: se guardan tal cual.
-        add(`archivos/${file.id}-${safeName(file.originalName)}`, await storage.get(file.storageKey), false);
-      } catch (err) {
-        logger.warn({ err, fileId: file.id }, 'export: file missing in storage');
+    res.attachment(`shaddai-${account.slug}-${today}.zip`).type('application/zip');
+    res.setHeader('Cache-Control', 'no-store');
+    const zip = new Zip((err, chunk, final) => {
+      if (err) {
+        logger.error({ err, accountId }, 'account export failed');
+        res.destroy(err);
+        return;
       }
+      res.write(chunk);
+      if (final) res.end();
+    });
+    const add = (name: string, data: Uint8Array, compress = true) => {
+      const entry = compress ? new ZipDeflate(name, { level: 6 }) : new ZipPassThrough(name);
+      zip.add(entry);
+      entry.push(data, true);
+    };
+
+    try {
+      const locale = resolveMailLocale(account.defaultLocale);
+      add(
+        'LEEME.txt',
+        new TextEncoder().encode(readme[locale].replace('{church}', account.name).replace('{date}', today)),
+      );
+      add('datos/account.json', json(account));
+      add('datos/audit-log.json', json(auditRows));
+      for (const { model } of ACCOUNT_DATA.filter((d) => d.export)) {
+        add(`datos/${exportFileName(model)}`, json(await exportRows(accountId, model)));
+      }
+      const files = await tenantDb().fileObject.findMany({
+        where: { deletedAt: null },
+        orderBy: { id: 'asc' },
+      });
+      for (const file of files) {
+        try {
+          // Imágenes y PDF ya vienen comprimidos: se guardan tal cual.
+          add(
+            `archivos/${file.id}-${safeName(file.originalName)}`,
+            await storage.get(file.storageKey),
+            false,
+          );
+        } catch (err) {
+          logger.warn({ err, fileId: file.id }, 'export: file missing in storage');
+        }
+      }
+      zip.end();
+    } catch (err) {
+      zip.terminate();
+      if (!res.headersSent) throw err;
+      // Ya salió parte del ZIP: se corta la descarga para que no quede un archivo incompleto que parezca bueno.
+      logger.error({ err, accountId }, 'account export failed');
+      res.destroy(err as Error);
     }
-    zip.end();
-  } catch (err) {
-    zip.terminate();
-    if (!res.headersSent) throw err;
-    // Ya salió parte del ZIP: se corta la descarga para que no quede un archivo incompleto que parezca bueno.
-    logger.error({ err, accountId }, 'account export failed');
-    res.destroy(err as Error);
-  }
-});
+  },
+);
 
 const ClosureSchema = z
   .object({ password: z.string().min(1).max(200), confirm: z.string().trim().min(1) })
@@ -106,6 +118,7 @@ accountDataRouter.post(
   authenticate(),
   requireAccountUser,
   forbidImpersonation,
+  forbidInDemo,
   async (req, res) => {
     const input = parse(ClosureSchema, req.body);
     const db = tenantDb();

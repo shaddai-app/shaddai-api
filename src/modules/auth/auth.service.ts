@@ -7,6 +7,7 @@ import { assertStrongPassword } from '../../core/auth/password-policy.js';
 import { generateOpaqueToken, hashToken } from '../../core/auth/tokens.js';
 import { createTotpSecret, decryptSecret, encryptSecret, verifyTotp } from '../../core/auth/totp.js';
 import { prisma } from '../../core/db/prisma.js';
+import { assertNotDemo, isDemoAccount } from '../../core/demo.js';
 import { AppError } from '../../core/http/errors.js';
 import { sendMail } from '../../core/mail/mailer.js';
 import { passwordResetMail, resolveMailLocale } from '../../core/mail/templates.js';
@@ -212,6 +213,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
     },
   });
   if (!user || !user.isActive || user.deletedAt) return;
+  // La demo es pública: sin enlaces de restablecimiento (ni mails) para sus usuarios.
+  if (await isDemoAccount(user.accountId)) return;
 
   const token = generateOpaqueToken();
   await prisma.$transaction([
@@ -249,6 +252,7 @@ export async function resetPassword(input: { token: string; newPassword: string 
   if (!record || record.usedAt || record.expiresAt <= new Date())
     throw AppError.badRequest('RESET_TOKEN_INVALID');
   const user = record.user;
+  await assertNotDemo(user.accountId);
   assertCanHoldSession(user);
   assertStrongPassword(input.newPassword, [user.email, user.firstName, user.lastName]);
 
