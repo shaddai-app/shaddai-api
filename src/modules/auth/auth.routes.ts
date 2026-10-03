@@ -8,9 +8,15 @@ import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
 import { authenticate, authOf, forbidImpersonation } from '../../core/middleware/authenticate.js';
 import { requireSameSiteRequest } from '../../core/middleware/csrf.js';
-import { loginLimiter, passwordResetLimiter, refreshLimiter } from '../../core/middleware/rate-limit.js';
+import {
+  demoLoginLimiter,
+  loginLimiter,
+  passwordResetLimiter,
+  refreshLimiter,
+} from '../../core/middleware/rate-limit.js';
 import {
   ChangePasswordSchema,
+  DemoLoginSchema,
   ForgotPasswordSchema,
   LoginSchema,
   RecoveryCodesSchema,
@@ -60,6 +66,10 @@ authRouter.post('/auth/login', loginLimiter, async (req, res) => {
     return;
   }
   sessionResponse(res, result);
+});
+
+authRouter.post('/auth/demo', demoLoginLimiter, async (req, res) => {
+  sessionResponse(res, await auth.demoLogin(parse(DemoLoginSchema, req.body).role));
 });
 
 authRouter.post('/auth/2fa/verify', loginLimiter, async (req, res) => {

@@ -14,7 +14,7 @@ npm run dev          # http://localhost:3000/api/v1/health
 npm run dev          # http://localhost:5173
 ```
 
-Abrí `http://localhost:5173`.
+Abrí `http://localhost:5173`: sin sesión se ve la página de presentación (qué es Shaddai, planes y preguntas) con el ingreso en la portada. Con sesión, `/` lleva directo al inicio de la iglesia (`/inicio`).
 
 ## 2. La iglesia de ejemplo
 
@@ -45,6 +45,8 @@ Todos usan la contraseña **pública** `shaddaipass` (la de la demo para cliente
 | `demo-lider@shaddai.local`    | Líder de célula | Su célula desde el celular: reporte semanal, integrantes, maestro del Nivel 1   |
 
 Entrar con cada uno muestra cómo cambia la app según el rol: el menú solo ofrece lo que ese rol puede usar.
+
+Desde la página de presentación, **Probar la demo** entra con uno de estos cuatro perfiles con un clic, sin tipear la contraseña (`POST /auth/demo`, con su propio límite de 20 ingresos por minuto por IP). Como no pasa por la contraseña, un visitante que se equivocó varias veces no deja bloqueado al usuario demo para los demás.
 
 ### Dejar la demo como nueva
 

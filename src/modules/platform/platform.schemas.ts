@@ -8,6 +8,9 @@ const locale = z.enum(['es', 'en', 'pt']);
 const email = z.string().trim().toLowerCase().pipe(z.email().max(150));
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 
+/** Días de prueba gratis por defecto al dar de alta una iglesia (también los muestra la landing). */
+export const DEFAULT_TRIAL_DAYS = 30;
+
 export const IdParam = z.object({ id: z.coerce.number().int().positive() });
 export const AccountUserParams = z.object({
   id: z.coerce.number().int().positive(),
@@ -57,7 +60,7 @@ export const CreateAccountSchema = z
     timezone: accountFields.timezone.default('America/Argentina/Buenos_Aires'),
     currency: accountFields.currency.default('ARS'),
     status: z.enum(['trial', 'active']).default('trial'),
-    trialDays: z.number().int().min(1).max(365).default(30),
+    trialDays: z.number().int().min(1).max(365).default(DEFAULT_TRIAL_DAYS),
     admin: z.object({
       email,
       firstName: z.string().trim().min(1).max(80),
