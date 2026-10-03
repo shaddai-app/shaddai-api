@@ -1,7 +1,4 @@
 # Falsos positivos revisados (gitleaks en CI). Formato: commit:archivo:regla:línea.
-# Contraseña descartable del SQL Server efímero del job de migraciones (solo existe dentro del CI).
-c5887d7078af3a8e46db097bd14955e871711f2f:.github/workflows/ci.yml:generic-api-key:35
-c5887d7078af3a8e46db097bd14955e871711f2f:.github/workflows/ci.yml:generic-api-key:46
 # DB_PASSWORD vacío en .env.example (gitleaks toma la línea siguiente como valor).
 c5887d7078af3a8e46db097bd14955e871711f2f:.env.example:generic-api-key:15
 # Contraseña de prueba de un test de integración.

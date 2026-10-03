@@ -7,9 +7,12 @@
 //   del otro lado (ej. Person.userId en vez de User.personId).
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../../src/generated/prisma"
-  moduleFormat = "esm"
+  provider            = "prisma-client"
+  output              = "../../src/generated/prisma"
+  moduleFormat        = "esm"
+  // Fija la extensión de los imports (si no, Prisma la deduce del tsconfig y en la imagen Docker,
+  // que genera antes de copiarlo, salía .ts: dist/ quedaba importando archivos que no existen).
+  importFileExtension = "js"
 }
 
 datasource db {
