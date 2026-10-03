@@ -14,7 +14,7 @@ export const LoginSchema = z.object({
 
 export const TwoFactorVerifySchema = z.object({
   challengeToken: z.string().min(1),
-  code: z.string().trim(),
+  code: z.string().trim().max(20), // 6 dígitos de la app o un código de recuperación
 });
 
 export const ChangePasswordSchema = z.object({
@@ -30,3 +30,10 @@ export const ResetPasswordSchema = z.object({
 });
 
 export const TotpConfirmSchema = z.object({ code: z.string().trim() });
+
+export const TotpDisableSchema = z.object({
+  password: z.string().min(1).max(200),
+  code: z.string().trim().min(1).max(20),
+});
+
+export const RecoveryCodesSchema = z.object({ password: z.string().min(1).max(200) });

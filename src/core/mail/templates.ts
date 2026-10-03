@@ -148,3 +148,69 @@ export function accountClosureMail(
     html: layout(subject, paragraphs, action),
   };
 }
+
+export type SecurityEvent = 'totp_disabled' | 'totp_reset' | 'recovery_code_used';
+
+const securityCopy = {
+  es: {
+    subject: 'Cambio en la seguridad de tu cuenta de Shaddai',
+    hello: (name: string) => `Hola ${name}:`,
+    events: {
+      totp_disabled: 'Se desactivó la verificación en dos pasos de tu cuenta.',
+      totp_reset:
+        'Un administrador de tu iglesia restableció tu verificación en dos pasos: la próxima vez entrás solo con la contraseña y podés volver a activarla.',
+      recovery_code_used: (left: number) =>
+        `Se entró a tu cuenta con un código de recuperación. Te quedan ${left}; si se te terminan, generá nuevos desde Seguridad.`,
+    },
+    notYou: 'Si no fuiste vos, cambiá tu contraseña ahora y avisale al administrador de tu iglesia.',
+    notRequested: 'Si no lo pediste, avisale al administrador de tu iglesia.',
+    action: 'Revisar seguridad',
+  },
+  en: {
+    subject: 'A security change on your Shaddai account',
+    hello: (name: string) => `Hi ${name},`,
+    events: {
+      totp_disabled: 'Two-step verification was turned off on your account.',
+      totp_reset:
+        'An administrator of your church reset your two-step verification: next time you sign in with your password only, and you can turn it on again.',
+      recovery_code_used: (left: number) =>
+        `Someone signed in to your account with a recovery code. You have ${left} left; if you run out, generate new ones from Security.`,
+    },
+    notYou: "If this wasn't you, change your password now and tell your church administrator.",
+    notRequested: "If you didn't ask for it, tell your church administrator.",
+    action: 'Review security',
+  },
+  pt: {
+    subject: 'Mudança na segurança da sua conta do Shaddai',
+    hello: (name: string) => `Olá ${name},`,
+    events: {
+      totp_disabled: 'A verificação em duas etapas da sua conta foi desativada.',
+      totp_reset:
+        'Um administrador da sua igreja redefiniu sua verificação em duas etapas: da próxima vez você entra só com a senha e pode ativá-la de novo.',
+      recovery_code_used: (left: number) =>
+        `Alguém entrou na sua conta com um código de recuperação. Restam ${left}; se acabarem, gere novos em Segurança.`,
+    },
+    notYou: 'Se não foi você, troque sua senha agora e avise o administrador da sua igreja.',
+    notRequested: 'Se você não pediu, avise o administrador da sua igreja.',
+    action: 'Revisar segurança',
+  },
+} as const;
+
+/** Aviso al usuario de un cambio en su verificación en dos pasos. */
+export function securityAlertMail(
+  locale: MailLocale,
+  data: { name: string; event: SecurityEvent; recoveryCodesLeft?: number; url: string },
+) {
+  const c = securityCopy[locale];
+  const event =
+    data.event === 'recovery_code_used'
+      ? c.events.recovery_code_used(data.recoveryCodesLeft ?? 0)
+      : c.events[data.event];
+  // El restablecimiento lo hace un administrador: la duda es si la persona lo pidió.
+  const paragraphs = [c.hello(data.name), event, data.event === 'totp_reset' ? c.notRequested : c.notYou];
+  return {
+    subject: c.subject,
+    text: [...paragraphs, '', `${c.action}: ${data.url}`].join('\n'),
+    html: layout(c.subject, paragraphs, { label: c.action, url: data.url }),
+  };
+}

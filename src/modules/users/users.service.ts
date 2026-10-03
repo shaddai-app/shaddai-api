@@ -10,6 +10,7 @@ import { sendMail } from '../../core/mail/mailer.js';
 import { resolveMailLocale, temporaryAccessMail } from '../../core/mail/templates.js';
 import { invalidateUserPermissions } from '../../core/rbac/permission-cache.js';
 import { ADMIN_ROLE_KEY } from '../../core/rbac/resolve.js';
+import { sendSecurityAlert } from '../auth/two-factor.js';
 import type { CreateUserSchema, ListUsersQuery, UpdateUserSchema } from './users.schemas.js';
 
 const adminRoleFilter = { systemKey: ADMIN_ROLE_KEY, isLocked: true } as const;
@@ -23,6 +24,7 @@ const userSelect = {
   isActive: true,
   isAccountOwner: true,
   mustChangePassword: true,
+  totpEnabled: true,
   lockedUntil: true,
   lastLoginAt: true,
   createdAt: true,
@@ -268,6 +270,30 @@ export async function unlock(id: number) {
 }
 
 /** Reset por el admin de la cuenta: temporal de un solo uso, desbloquea y cierra sesiones. */
+/**
+ * Restablece la verificación en dos pasos de un usuario que perdió el celular y los códigos de
+ * recuperación: vuelve a entrar solo con la contraseña. Cierra sus sesiones y le avisa por mail.
+ */
+export async function resetTwoFactor(actorId: number, id: number) {
+  if (id === actorId) throw AppError.conflict('USE_SECURITY_SETTINGS'); // para uno mismo: Seguridad
+  const user = await findUser(id);
+  if (!user.totpEnabled) throw AppError.conflict('TOTP_NOT_ENABLED');
+  const db = tenantDb();
+  await db.user.update({ where: { id }, data: { totpEnabled: false, totpSecretEnc: null } });
+  await db.totpRecoveryCode.deleteMany({ where: { userId: id } });
+  await db.refreshToken.updateMany({
+    where: { userId: id, revokedAt: null },
+    data: { revokedAt: new Date(), revokedReason: 'admin' },
+  });
+  await audit({ action: 'users.reset_2fa', entity: 'User', entityId: id });
+  const account = await db.account.findUniqueOrThrow({
+    where: { id: currentAccountId() },
+    select: { defaultLocale: true },
+  });
+  await sendSecurityAlert({ ...user, account }, 'totp_reset');
+  return getUser(id);
+}
+
 export async function resetPassword(actorId: number, id: number, sendAccessEmail: boolean) {
   if (id === actorId) throw AppError.conflict('USE_CHANGE_PASSWORD'); // para uno mismo: cambio de contraseña
   const user = await findUser(id);

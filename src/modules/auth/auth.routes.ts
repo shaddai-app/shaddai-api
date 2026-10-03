@@ -12,8 +12,10 @@ import {
   ChangePasswordSchema,
   ForgotPasswordSchema,
   LoginSchema,
+  RecoveryCodesSchema,
   ResetPasswordSchema,
   TotpConfirmSchema,
+  TotpDisableSchema,
   TwoFactorVerifySchema,
 } from './auth.schemas.js';
 import { stopImpersonation } from '../platform/impersonation.service.js';
@@ -150,11 +152,29 @@ authRouter.post(
   async (req, res) => {
     const { userId, sessionId, restriction } = authOf(req);
     if (restriction === 'password_change') throw AppError.forbidden('PASSWORD_CHANGE_REQUIRED');
-    const { accessToken } = await auth.confirmTotpEnrollment(
+    const { accessToken, recoveryCodes } = await auth.confirmTotpEnrollment(
       userId,
       sessionId,
       parse(TotpConfirmSchema, req.body).code,
     );
-    res.json({ accessToken, restriction: null });
+    res.json({ accessToken, restriction: null, recoveryCodes });
+  },
+);
+
+// Desactivar la verificación en dos pasos y regenerar los códigos de recuperación: piden la
+// contraseña (y para desactivar, además, un código). Con el límite del login.
+authRouter.post('/auth/2fa/disable', loginLimiter, authenticate(), forbidImpersonation, async (req, res) => {
+  await auth.disableTotp(authOf(req).userId, parse(TotpDisableSchema, req.body));
+  res.status(204).end();
+});
+
+authRouter.post(
+  '/auth/2fa/recovery-codes',
+  loginLimiter,
+  authenticate(),
+  forbidImpersonation,
+  async (req, res) => {
+    const { password } = parse(RecoveryCodesSchema, req.body);
+    res.json(await auth.regenerateRecoveryCodes(authOf(req).userId, password));
   },
 );
