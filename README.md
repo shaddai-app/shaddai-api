@@ -60,20 +60,21 @@ npm run dev             # http://localhost:3000/api/v1/health
 
 ## Scripts
 
-| Script                                | Descripción                                                   |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `dev`                                 | API con recarga (tsx watch)                                   |
-| `build` / `start`                     | Compila a `dist/` / ejecuta build                             |
-| `lint`, `typecheck`, `format`, `test` | Calidad                                                       |
-| `env:init`                            | Genera `.env` desde `.env.example`                            |
-| `db:sql-login`                        | Crea/actualiza el login SQL `shaddai_app`                     |
-| `db:migrate`                          | `prisma migrate dev` — crear una migración nueva (desarrollo) |
-| `db:deploy`                           | Aplica migraciones pendientes                                 |
-| `db:seed`                             | Seed idempotente                                              |
-| `db:setup`                            | deploy + generate + seed (PC nueva)                           |
-| `db:reset`                            | Borra y recrea la base (solo desarrollo)                      |
-| `db:studio`                           | Prisma Studio                                                 |
-| `db:backup`                           | Backup `.bak` en `backups/`                                   |
+| Script                                | Descripción                                                       |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `dev`                                 | API con recarga (tsx watch)                                       |
+| `build` / `start`                     | Compila a `dist/` / ejecuta build                                 |
+| `lint`, `typecheck`, `format`, `test` | Calidad                                                           |
+| `env:init`                            | Genera `.env` desde `.env.example`                                |
+| `db:sql-login`                        | Crea/actualiza el login SQL `shaddai_app`                         |
+| `db:migrate`                          | `prisma migrate dev` — crear una migración nueva (desarrollo)     |
+| `db:deploy`                           | Aplica migraciones pendientes                                     |
+| `db:seed`                             | Seed idempotente                                                  |
+| `db:setup`                            | deploy + generate + seed (PC nueva)                               |
+| `db:reset`                            | Borra y recrea la base (solo desarrollo)                          |
+| `db:studio`                           | Prisma Studio                                                     |
+| `db:backup`                           | Backup `.bak` verificado en la carpeta de backups de la instancia |
+| `db:restore -- -File <bak> [-Drop]`   | Restaura en una base nueva y compara filas con la original        |
 
 ## Estructura
 
@@ -113,4 +114,4 @@ Ver [CONTRIBUTING.md](CONTRIBUTING.md) para ramas y commits.
 
 ## Producción
 
-Las decisiones de infraestructura (Azure, Cloudflare, Brevo, R2, Sentry), el porqué, los registros DNS y la lista de pasos pendientes están en [docs/produccion.md](docs/produccion.md).
+Las decisiones de infraestructura (Azure, Cloudflare, Brevo, R2, Sentry), el porqué, los registros DNS y la lista de pasos pendientes están en [docs/produccion.md](docs/produccion.md). Cómo se arma y se publica cada entorno, y cómo se restaura un backup: [docs/deploy.md](docs/deploy.md). Revisión de seguridad: [docs/seguridad.md](docs/seguridad.md).

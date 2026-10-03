@@ -109,7 +109,7 @@ Estados: ✅ cumple · ⏳ pendiente con fecha o tramo · ➖ no aplica.
 
 ## Pendientes
 
-- ⏳ **Escaneo dinámico** (OWASP ZAP baseline) contra staging: tramo 4, cuando haya entorno publicado.
+- ⏳ **Escaneo dinámico** (OWASP ZAP baseline): el workflow `zap.yml` está listo; se corre contra staging apenas esté publicado (deploy.md, sección 7).
 - ⏳ **Registro de lectura de fichas sensibles**: después de la beta.
 - ⏳ **2FA optativo para todos los usuarios**: Fase 9.
 - ⏳ **Texto legal** de la política de privacidad y los términos: borrador en la web, pendiente de revisión por un abogado (Ley 25.326).

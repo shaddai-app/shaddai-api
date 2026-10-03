@@ -1,0 +1,26 @@
+name: Escaneo de seguridad (ZAP)
+
+# Escaneo pasivo OWASP ZAP (baseline) contra un entorno publicado: recorre la web y revisa headers,
+# cookies y respuestas sin atacar. Se corre a mano contra staging antes de cada salida a producción
+# y el reporte queda como artefacto del workflow (ver docs/seguridad.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: URL a escanear (por defecto, la web de staging)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ inputs.target || vars.STAGING_APP_URL }}
+          allow_issue_writing: false
+          artifact_name: zap-report

@@ -14,9 +14,9 @@ const csv = z.string().transform((v) =>
     .filter(Boolean),
 );
 
-/** Variable vacía en el .env (`X=`) = sin definir. */
+/** Variable vacía (`X=`) o en blanco (Container Apps no admite secretos vacíos) = sin definir. */
 const optional = <T extends z.ZodType>(schema: T) =>
-  z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema.optional());
 
 const EnvSchema = z
   .object({
@@ -80,7 +80,7 @@ const EnvSchema = z
 
     // Geocodificación de direcciones (células, personas). none = solo carga manual del punto en el mapa.
     GEOCODING_PROVIDER: z.enum(['none', 'locationiq', 'geoapify']).default('none'),
-    GEOCODING_API_KEY: z.string().optional(),
+    GEOCODING_API_KEY: optional(z.string()),
     GEOCODING_COUNTRY: z.string().length(2).default('ar'),
   })
   .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
