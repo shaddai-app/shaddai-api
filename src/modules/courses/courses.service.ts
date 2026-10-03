@@ -29,6 +29,7 @@ const LevelFields = z.object({
   name: z.string().trim().min(1).max(100),
   description: optionalText(500),
   teacherPersonId: z.number().int().positive().nullable().optional(),
+  minAttendancePct: z.number().int().min(1).max(100).nullable().optional(),
 });
 
 export const CreateCourseSchema = z
@@ -91,7 +92,7 @@ async function levelInScope(viewer: Viewer, key: PermissionKey, levelId: number)
 }
 
 /** El nivel tiene que verse (si no, 404) y admitir la acción (si no, 403). */
-async function assertLevel(viewer: Viewer, levelId: number, key: PermissionKey) {
+export async function assertLevel(viewer: Viewer, levelId: number, key: PermissionKey) {
   if (!(await levelInScope(viewer, 'discipulado.ver', levelId)))
     throw AppError.notFound('COURSE_LEVEL_NOT_FOUND');
   if (key !== 'discipulado.ver' && !(await levelInScope(viewer, key, levelId))) {
@@ -107,6 +108,7 @@ const levelSelect = {
   name: true,
   description: true,
   sortOrder: true,
+  minAttendancePct: true,
   isActive: true,
   teacher: { select: personRef },
 } as const;
@@ -255,6 +257,7 @@ export async function addLevel(viewer: Viewer, courseId: number, input: z.infer<
       name: input.name,
       description: input.description ?? null,
       teacherPersonId: input.teacherPersonId ?? null,
+      minAttendancePct: input.minAttendancePct ?? null,
       sortOrder: (last._max.sortOrder ?? 0) + 10,
     },
   });
@@ -297,8 +300,12 @@ export async function reorderLevels(viewer: Viewer, courseId: number, ids: numbe
 export async function deleteLevel(id: number) {
   const level = await existingLevel(id);
   const db = tenantDb();
-  if (await db.courseEnrollment.count({ where: { levelId: id } }))
+  if (
+    (await db.courseEnrollment.count({ where: { levelId: id } })) ||
+    (await db.courseSession.count({ where: { levelId: id } }))
+  ) {
     throw AppError.conflict('COURSE_LEVEL_IN_USE');
+  }
   await db.courseLevel.delete({ where: { id } });
   await audit({ action: 'courses.level.delete', entity: 'Course', entityId: level.courseId, before: level });
 }
@@ -325,15 +332,61 @@ const presentEnrollment = (e: EnrollmentRow) => ({
   droppedAt: isoDate(e.droppedAt),
 });
 
+export interface Progress {
+  /** Clases en las que se le tomó asistencia. */
+  sessions: number;
+  attended: number;
+  /** Porcentaje redondeado, o null si todavía no tuvo clases. */
+  pct: number | null;
+  /** Cumple la asistencia mínima del nivel (null: el nivel no la pide o no hubo clases). */
+  meetsMinimum: boolean | null;
+}
+
+/** Avance de cada inscripción: asistencias sobre las clases en que se le tomó lista. */
+export async function progressOf(
+  enrollments: { id: number; minAttendancePct: number | null }[],
+): Promise<Map<number, Progress>> {
+  const ids = enrollments.map((e) => e.id);
+  const rows = ids.length
+    ? await tenantDb().courseAttendance.groupBy({
+        by: ['enrollmentId', 'present'],
+        where: { enrollmentId: { in: ids } },
+        _count: { _all: true },
+      })
+    : [];
+  const result = new Map<number, Progress>();
+  for (const e of enrollments) {
+    const mine = rows.filter((r) => r.enrollmentId === e.id);
+    const sessions = mine.reduce((n, r) => n + r._count._all, 0);
+    const attended = mine.find((r) => r.present)?._count._all ?? 0;
+    const pct = sessions ? Math.round((attended / sessions) * 100) : null;
+    result.set(e.id, {
+      sessions,
+      attended,
+      pct,
+      meetsMinimum: pct === null || e.minAttendancePct === null ? null : pct >= e.minAttendancePct,
+    });
+  }
+  return result;
+}
+
 export async function listEnrollments(viewer: Viewer, levelId: number, q: z.infer<typeof EnrollmentQuery>) {
   await assertLevel(viewer, levelId, 'discipulado.ver');
-  const rows = await tenantDb().courseEnrollment.findMany({
+  const db = tenantDb();
+  const level = await db.courseLevel.findUniqueOrThrow({
+    where: { id: levelId },
+    select: { minAttendancePct: true },
+  });
+  const rows = await db.courseEnrollment.findMany({
     where: { levelId, person: { deletedAt: null }, ...(q.status === 'all' ? {} : { status: q.status }) },
     select: enrollmentSelect,
     orderBy: [{ person: { lastName: 'asc' } }, { person: { firstName: 'asc' } }],
     take: 500,
   });
-  return { items: rows.map(presentEnrollment) };
+  const progress = await progressOf(
+    rows.map((r) => ({ id: r.id, minAttendancePct: level.minAttendancePct })),
+  );
+  return { items: rows.map((r) => ({ ...presentEnrollment(r), progress: progress.get(r.id)! })) };
 }
 
 /** Inscribe a varias personas; quien ya está activa en el nivel se saltea. */
@@ -482,7 +535,10 @@ export async function deleteEnrollment(viewer: Viewer, id: number) {
   const row = await db.courseEnrollment.findFirst({ where: { id, level: { course: { deletedAt: null } } } });
   if (!row) throw AppError.notFound('COURSE_ENROLLMENT_NOT_FOUND');
   await assertLevel(viewer, row.levelId, 'discipulado.inscribir');
-  await db.courseEnrollment.delete({ where: { id } });
+  await db.$transaction([
+    db.courseAttendance.deleteMany({ where: { enrollmentId: id } }),
+    db.courseEnrollment.delete({ where: { id } }),
+  ]);
   await audit({ action: 'courses.enrollment.delete', entity: 'CourseEnrollment', entityId: id, before: row });
 }
 
@@ -498,16 +554,28 @@ export async function personCourses(viewer: Viewer, personId: number) {
       enrolledAt: true,
       completedAt: true,
       droppedAt: true,
-      level: { select: { id: true, name: true, course: { select: { id: true, name: true } } } },
+      level: {
+        select: {
+          id: true,
+          name: true,
+          minAttendancePct: true,
+          course: { select: { id: true, name: true } },
+        },
+      },
     },
     orderBy: { enrolledAt: 'desc' },
   });
+  const progress = await progressOf(
+    rows.map((r) => ({ id: r.id, minAttendancePct: r.level.minAttendancePct })),
+  );
   return {
-    items: rows.map((r) => ({
+    items: rows.map(({ level: { minAttendancePct: _min, ...level }, ...r }) => ({
       ...r,
+      level,
       enrolledAt: isoDate(r.enrolledAt),
       completedAt: isoDate(r.completedAt),
       droppedAt: isoDate(r.droppedAt),
+      progress: progress.get(r.id)!,
     })),
   };
 }

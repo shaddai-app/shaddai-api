@@ -13,6 +13,8 @@ export const ACCOUNT_DATA: readonly { model: string; export: boolean }[] = [
   { model: 'DailyJobRun', export: false },
   { model: 'PrayerRequestPrayer', export: true },
   { model: 'PrayerRequest', export: true },
+  { model: 'CourseAttendance', export: true },
+  { model: 'CourseSession', export: true },
   { model: 'CourseEnrollment', export: true },
   { model: 'CourseLevel', export: true },
   { model: 'Course', export: true },

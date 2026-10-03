@@ -19,19 +19,22 @@ model Course {
 }
 
 model CourseLevel {
-  id              Int                @id @default(autoincrement())
-  accountId       Int
-  courseId        Int
-  course          Course             @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  name            String             @db.NVarChar(100)
-  description     String?            @db.NVarChar(500)
-  sortOrder       Int
+  id               Int                @id @default(autoincrement())
+  accountId        Int
+  courseId         Int
+  course           Course             @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name             String             @db.NVarChar(100)
+  description      String?            @db.NVarChar(500)
+  sortOrder        Int
   // Quien da el nivel: con alcance "propio" en discipulado ve y gestiona solo sus niveles.
-  teacherPersonId Int?
-  teacher         Person?            @relation("CourseTeacher", fields: [teacherPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  isActive        Boolean            @default(true)
-  createdAt       DateTime           @default(now())
-  enrollments     CourseEnrollment[]
+  teacherPersonId  Int?
+  teacher          Person?            @relation("CourseTeacher", fields: [teacherPersonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Asistencia mínima (%) para aprobar: solo informa en el avance, no bloquea.
+  minAttendancePct Int?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  enrollments      CourseEnrollment[]
+  sessions         CourseSession[]
 
   @@index([accountId, courseId])
   @@index([accountId, teacherPersonId])
@@ -40,21 +43,52 @@ model CourseLevel {
 // Una persona en un nivel. Puede volver a inscribirse después de una baja (una sola activa por nivel:
 // lo valida el servicio).
 model CourseEnrollment {
-  id          Int         @id @default(autoincrement())
+  id          Int                @id @default(autoincrement())
   accountId   Int
   levelId     Int
-  level       CourseLevel @relation(fields: [levelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  level       CourseLevel        @relation(fields: [levelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   personId    Int
-  person      Person      @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status      String      @default("active") @db.VarChar(10) // active|completed|dropped
-  enrolledAt  DateTime    @db.Date
-  completedAt DateTime?   @db.Date
-  droppedAt   DateTime?   @db.Date
-  notes       String?     @db.NVarChar(500)
+  person      Person             @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status      String             @default("active") @db.VarChar(10) // active|completed|dropped
+  enrolledAt  DateTime           @db.Date
+  completedAt DateTime?          @db.Date
+  droppedAt   DateTime?          @db.Date
+  notes       String?            @db.NVarChar(500)
   createdById Int?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  attendance  CourseAttendance[]
 
   @@index([accountId, levelId, status])
   @@index([accountId, personId])
+}
+
+// Una clase de un nivel (una por día). La asistencia se toma sobre las inscripciones del nivel.
+model CourseSession {
+  id          Int                @id @default(autoincrement())
+  accountId   Int
+  levelId     Int
+  level       CourseLevel        @relation(fields: [levelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  date        DateTime           @db.Date
+  topic       String?            @db.NVarChar(200)
+  notes       String?            @db.NVarChar(1000)
+  createdById Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  attendance  CourseAttendance[]
+
+  @@unique([levelId, date])
+  @@index([accountId, levelId, date])
+}
+
+// Presente o ausente de una inscripción en una clase. Sin fila = no se tomó (ej. se inscribió después).
+model CourseAttendance {
+  sessionId    Int
+  session      CourseSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollmentId Int
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  present      Boolean
+
+  @@id([sessionId, enrollmentId])
+  @@index([enrollmentId])
 }

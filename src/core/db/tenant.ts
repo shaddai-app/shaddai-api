@@ -62,6 +62,7 @@ export const TENANT_MODELS = new Set([
   'Course',
   'CourseLevel',
   'CourseEnrollment',
+  'CourseSession',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -72,6 +73,10 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   PasswordResetToken: { user: { fk: 'userId', parent: 'User' } },
   TotpRecoveryCode: { user: { fk: 'userId', parent: 'User' } },
   AnnouncementAudience: { announcement: { fk: 'announcementId', parent: 'Announcement' } },
+  CourseAttendance: {
+    session: { fk: 'sessionId', parent: 'CourseSession' },
+    enrollment: { fk: 'enrollmentId', parent: 'CourseEnrollment' },
+  },
   PrayerRequestPrayer: {
     request: { fk: 'requestId', parent: 'PrayerRequest' },
     user: { fk: 'userId', parent: 'User' },

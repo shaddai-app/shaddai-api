@@ -44,6 +44,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoAnnouncements(prisma, existing.id);
     await seedDemoPrayerRequests(prisma, existing.id);
     await seedDemoCourses(prisma, existing.id);
+    await seedDemoCourseSessions(prisma, existing.id);
     return;
   }
 
@@ -102,6 +103,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoAnnouncements(prisma, account.id);
   await seedDemoPrayerRequests(prisma, account.id);
   await seedDemoCourses(prisma, account.id);
+  await seedDemoCourseSessions(prisma, account.id);
 }
 
 /**
@@ -1240,6 +1242,50 @@ async function seedDemoCourses(prisma: PrismaClient, accountId: number) {
   });
   for (const p of people.slice(9, 12)) await enroll(baptism.levels[0]!.id, p.id, 10);
   console.log('✔ Cursos de discipulado de ejemplo');
+}
+
+/**
+ * Clases semanales de ejemplo con asistencia en los niveles con alumnos de la Escuela de líderes
+ * (75% mínimo). La asistencia varía por alumno para que el avance tenga casos por debajo. Idempotente.
+ */
+async function seedDemoCourseSessions(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.courseSession.count({ where: { accountId } })) > 0) return;
+  const course = await prisma.course.findFirst({
+    where: { accountId, name: 'Escuela de líderes', deletedAt: null },
+    include: { levels: { orderBy: { sortOrder: 'asc' } } },
+  });
+  if (!course) return;
+  const topics = ['Identidad en Cristo', 'La oración', 'La Palabra', 'El Espíritu Santo', 'La iglesia'];
+  const day = 86_400_000;
+  for (const level of course.levels.slice(0, 2)) {
+    await prisma.courseLevel.update({ where: { id: level.id }, data: { minAttendancePct: 75 } });
+    const enrollments = await prisma.courseEnrollment.findMany({
+      where: { levelId: level.id, status: 'active' },
+      orderBy: { id: 'asc' },
+    });
+    if (!enrollments.length) continue;
+    const start = enrollments[0]!.enrolledAt.getTime();
+    for (const [week, topic] of topics.entries()) {
+      const date = new Date(start + (week * 7 + 3) * day);
+      if (date.getTime() > Date.now()) break;
+      await prisma.courseSession.create({
+        data: {
+          accountId,
+          levelId: level.id,
+          date,
+          topic,
+          attendance: {
+            // El último alumno falta casi siempre; el resto, una vez cada tanto.
+            create: enrollments.map((e, i) => ({
+              enrollmentId: e.id,
+              present: i === enrollments.length - 1 ? week === 0 : (week + i) % 4 !== 3,
+            })),
+          },
+        },
+      });
+    }
+  }
+  console.log('✔ Clases de discipulado de ejemplo');
 }
 
 /** Peticiones de oración de ejemplo: públicas (una anónima y una respondida) y una para pastores. */
