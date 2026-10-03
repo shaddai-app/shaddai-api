@@ -78,6 +78,15 @@ export const ChangeStatusSchema = z
 
 export const ResetAdminSchema = z.object({ sendAccessEmail: z.boolean().default(false) }).strict();
 
+/** Restablecer la demo: el id que ve la pantalla y las credenciales de la cuenta demo. */
+export const DemoResetSchema = z
+  .object({
+    accountId: z.number().int().positive(),
+    email: z.string().trim().max(150),
+    password: z.string().min(1).max(200),
+  })
+  .strict();
+
 export const ListAccountsQuery = PaginationQuery.extend({
   q: z.string().trim().max(100).optional(),
   status: z.enum(ACCOUNT_STATUSES).optional(),

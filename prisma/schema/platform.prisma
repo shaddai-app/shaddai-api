@@ -93,3 +93,11 @@ model Account {
 
   @@index([status])
 }
+
+// Traba de plataforma entre réplicas de la API (hasta 3 en Azure): una fila por proceso en curso,
+// con vencimiento por si la réplica muere a mitad de camino. La usa el restablecimiento de la demo.
+model PlatformLock {
+  key         String   @id @db.VarChar(50)
+  lockedUntil DateTime
+  createdAt   DateTime @default(now())
+}
