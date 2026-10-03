@@ -91,10 +91,6 @@ const EnvSchema = z
     MP_WEBHOOK_SECRET: optional(z.string()),
     /** Días después de vencido el pago antes de pasar la cuenta a "morosa" (solo lectura). */
     BILLING_GRACE_DAYS: z.coerce.number().int().min(0).max(60).default(5),
-
-    // Contraseña de los usuarios de la iglesia demo (cuenta 1). La usan el seed y el restablecimiento
-    // de la demo desde el panel de plataforma, que además la pide como credencial de confirmación.
-    SEED_DEMO_PASSWORD: optional(z.string().min(12)),
   })
   .refine((e) => e.NODE_ENV !== 'production' || Boolean(e.TURNSTILE_SECRET), {
     message: 'TURNSTILE_SECRET es obligatorio en producción',

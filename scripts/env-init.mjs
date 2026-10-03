@@ -26,7 +26,6 @@ const generated = {
   DB_PASSWORD: dbPassword(),
   JWT_ACCESS_SECRET: randomBytes(64).toString('base64url'),
   TOTP_ENC_KEY: randomBytes(32).toString('base64'),
-  SEED_DEMO_PASSWORD: dbPassword(20),
   ...(email ? { SEED_SUPERADMIN_EMAIL: email } : {}),
 };
 

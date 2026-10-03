@@ -5,14 +5,14 @@ import { tenantClientFor } from '../../src/core/db/tenant.js';
 import {
   DEMO_ACCOUNT_ID,
   DEMO_ADMIN_EMAIL,
+  DEMO_PASSWORD,
   DEMO_SLUG,
   DEMO_USERS,
 } from '../../src/modules/platform/demo/constants.js';
 import { app, createUser, loginAs, platformAdmin, prisma, provisionChurch, resetDb } from './helpers.js';
-import { TEST_DEMO_PASSWORD } from './test-env.js';
 
 const api = () => request(app);
-const credentials = { accountId: DEMO_ACCOUNT_ID, email: DEMO_ADMIN_EMAIL, password: TEST_DEMO_PASSWORD };
+const credentials = { accountId: DEMO_ACCOUNT_ID, email: DEMO_ADMIN_EMAIL, password: DEMO_PASSWORD };
 
 /**
  * Modelos que la demo puede tener vacíos, con su porqué. Todo lo demás de ACCOUNT_DATA tiene que tener
@@ -169,7 +169,7 @@ describe('restablecer la demo', () => {
       where: { id: DEMO_ACCOUNT_ID },
       data: { name: 'Iglesia Rota', status: 'past_due', currency: 'USD' },
     });
-    await loginAs({ email: DEMO_ADMIN_EMAIL, password: TEST_DEMO_PASSWORD });
+    await loginAs({ email: DEMO_ADMIN_EMAIL, password: DEMO_PASSWORD });
     await prisma.user.update({
       where: { email: DEMO_ADMIN_EMAIL },
       data: { totpEnabled: true, passwordHash: 'x', firstName: 'Hackeado' },
@@ -213,7 +213,8 @@ describe('restablecer la demo', () => {
     expect(actions).not.toContain('auth.login.success');
     const detail = await api().get(`/api/v1/platform/accounts/${DEMO_ACCOUNT_ID}`).set(headers);
     expect(detail.body.lastDemoResetAt).not.toBeNull();
-    await loginAs({ email: DEMO_ADMIN_EMAIL, password: TEST_DEMO_PASSWORD });
+    // La contraseña pública de la demo es siempre shaddaipass (decisión del dueño).
+    await loginAs({ email: DEMO_ADMIN_EMAIL, password: 'shaddaipass' });
   }, 300_000);
 
   it('todo dato de iglesia tiene ejemplos en la demo (regla para módulos nuevos)', async () => {

@@ -14,7 +14,13 @@ export const DEMO_ACCOUNT_DEFAULTS = {
   currency: 'ARS',
 } as const;
 
-/** Usuarios de la demo. Todos comparten SEED_DEMO_PASSWORD. */
+/**
+ * Contraseña PÚBLICA de los usuarios demo: se publica para que los clientes prueben la app, así que no
+ * es un secreto. El restablecimiento la vuelve a poner aunque un visitante la haya cambiado.
+ */
+export const DEMO_PASSWORD = 'shaddaipass';
+
+/** Usuarios de la demo. Todos comparten DEMO_PASSWORD. */
 export const DEMO_USERS = [
   { email: 'demo-admin@shaddai.local', firstName: 'Admin', lastName: 'Demo', role: 'admin', owner: true },
   { email: 'demo-pastor@shaddai.local', firstName: 'Pastor', lastName: 'Demo', role: 'pastor', owner: false },

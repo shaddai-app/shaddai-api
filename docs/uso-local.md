@@ -35,7 +35,7 @@ npm run db:seed      # idempotente: crea lo que falta, no duplica
 
 ### Usuarios de ejemplo
 
-Todos usan la contraseña `SEED_DEMO_PASSWORD` del `.env` de la API (la generó `npm run env:init`).
+Todos usan la contraseña **pública** `shaddaipass` (la de la demo para clientes; está en `src/modules/platform/demo/constants.ts`).
 
 | Usuario                       | Rol             | Para mostrar                                                                    |
 | ----------------------------- | --------------- | ------------------------------------------------------------------------------- |
@@ -50,9 +50,9 @@ Entrar con cada uno muestra cómo cambia la app según el rol: el menú solo ofr
 
 La iglesia demo es siempre la **cuenta 1** y es la que van a usar los clientes para probar la app. Después de una presentación (o todos los días), desde **Plataforma → Iglesias → Iglesia Demo → Restablecer demo**:
 
-- pide el mail del admin demo (`demo-admin@shaddai.local`) y la contraseña `SEED_DEMO_PASSWORD`: así nunca se restablece otra iglesia por error;
+- pide el mail del admin demo (`demo-admin@shaddai.local`) y la contraseña de la demo (`shaddaipass`): así nunca se restablece otra iglesia por error;
 - borra todo lo que se cargó y la deja como recién creada, con los datos de ejemplo y las fechas al día de hoy;
-- los usuarios demo vuelven a la contraseña de la configuración y sin 2FA; los usuarios creados en la demo se borran;
+- los usuarios demo vuelven a `shaddaipass` y sin 2FA; los usuarios creados en la demo se borran;
 - cierra las sesiones abiertas en la demo.
 
 La demo no se puede suspender ni dar de baja desde el panel.

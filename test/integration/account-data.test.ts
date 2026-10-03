@@ -7,6 +7,7 @@ import { purgeExpiredAccounts } from '../../src/core/db/account-data.js';
 import { TENANT_MODELS } from '../../src/core/db/tenant.js';
 import { memoryOutbox } from '../../src/core/mail/mailer.js';
 import { storage } from '../../src/core/storage/storage.js';
+import { DEMO_PASSWORD } from '../../src/modules/platform/demo/constants.js';
 import { actor, app, prisma, provisionChurch, resetDb, STRONG_PASSWORD } from './helpers.js';
 
 beforeEach(resetDb);
@@ -199,19 +200,17 @@ describe('con datos de todos los módulos (iglesia demo)', () => {
     const { seedPlans } = await import('../../prisma/seed/plans.js');
     const { seedDemo } = await import('../../prisma/seed/demo.js');
     process.env.SEED_DEMO = 'true';
-    process.env.SEED_DEMO_PASSWORD = 'solo-para-este-test-123';
     try {
       await seedPlans(prisma);
       await seedDemo(prisma);
     } finally {
       delete process.env.SEED_DEMO;
-      delete process.env.SEED_DEMO_PASSWORD;
     }
     const demo = await prisma.account.findUniqueOrThrow({ where: { slug: 'iglesia-demo' } });
     const owner = await prisma.user.findFirstOrThrow({ where: { accountId: demo.id, isAccountOwner: true } });
     const login = await request(app)
       .post(api('/auth/login'))
-      .send({ email: owner.email, password: 'solo-para-este-test-123' });
+      .send({ email: owner.email, password: DEMO_PASSWORD });
     const headers = { Authorization: `Bearer ${login.body.accessToken as string}` };
 
     const res = await request(app).get(api('/account/export')).set(headers).buffer(true).parse(binary);
