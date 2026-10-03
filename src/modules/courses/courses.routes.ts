@@ -3,6 +3,7 @@ import { tenantRouter } from '../../core/http/secure-router.js';
 import { parse } from '../../core/http/validate.js';
 import { viewerOf } from '../people/people.scope.js';
 import * as courses from './courses.service.js';
+import * as sessions from './sessions.service.js';
 
 const t = tenantRouter();
 export const coursesRouter = t.router;
@@ -85,4 +86,38 @@ t.delete('/course-enrollments/:id', 'discipulado.inscribir', async (req, res) =>
 
 t.get('/people/:id/courses', 'discipulado.ver', async (req, res) => {
   res.json(await courses.personCourses(await viewerOf(req), parse(IdParam, req.params).id));
+});
+
+// ───────────── Clases y asistencia (alcance propio: los niveles que enseña) ─────────────
+
+t.get('/course-levels/:id/sessions', 'discipulado.ver', async (req, res) => {
+  res.json(await sessions.listSessions(await viewerOf(req), parse(IdParam, req.params).id));
+});
+
+/** Lista para tomar asistencia de una clase nueva en esa fecha. */
+t.get('/course-levels/:id/roster', 'discipulado.ver', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const { date } = parse(sessions.RosterQuery, req.query);
+  res.json(await sessions.rosterFor(await viewerOf(req), id, date));
+});
+
+t.post('/course-levels/:id/sessions', 'discipulado.inscribir', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(sessions.CreateSessionSchema, req.body);
+  res.status(201).json(await sessions.createSession(await viewerOf(req), id, input));
+});
+
+t.get('/course-sessions/:id', 'discipulado.ver', async (req, res) => {
+  res.json(await sessions.getSession(await viewerOf(req), parse(IdParam, req.params).id));
+});
+
+t.patch('/course-sessions/:id', 'discipulado.inscribir', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(sessions.UpdateSessionSchema, req.body);
+  res.json(await sessions.updateSession(await viewerOf(req), id, input));
+});
+
+t.delete('/course-sessions/:id', 'discipulado.inscribir', async (req, res) => {
+  await sessions.deleteSession(await viewerOf(req), parse(IdParam, req.params).id);
+  res.status(204).end();
 });

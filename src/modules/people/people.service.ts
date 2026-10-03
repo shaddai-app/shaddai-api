@@ -877,9 +877,9 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
         select: { levelId: true },
       })
     ).map((e) => e.levelId);
-    await tx.courseEnrollment.deleteMany({
-      where: { personId: sourceId, status: 'active', levelId: { in: targetLevels } },
-    });
+    const duplicated = { personId: sourceId, status: 'active', levelId: { in: targetLevels } };
+    await tx.courseAttendance.deleteMany({ where: { enrollment: duplicated } });
+    await tx.courseEnrollment.deleteMany({ where: duplicated });
     await tx.courseEnrollment.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
     await tx.courseLevel.updateMany({
       where: { teacherPersonId: sourceId },
