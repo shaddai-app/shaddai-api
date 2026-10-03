@@ -112,6 +112,11 @@ await tenantDb().campus.create({ data: { ...data, accountId: currentAccountId() 
 
 Ver [CONTRIBUTING.md](CONTRIBUTING.md) para ramas y commits.
 
+## Usar la app y llevarla a producción
+
+- **Explorar y presentar desde tu PC** (iglesia de ejemplo, usuarios por rol, recorrido sugerido, acceso desde celulares por WiFi): [docs/uso-local.md](docs/uso-local.md).
+- **Hoja de ruta a producción**, en orden y con quién hace cada paso: [docs/camino-a-produccion.md](docs/camino-a-produccion.md).
+
 ## Producción
 
 Las decisiones de infraestructura (Azure, Cloudflare, Brevo, R2, Sentry), el porqué, los registros DNS y la lista de pasos pendientes están en [docs/produccion.md](docs/produccion.md). Cómo se arma y se publica cada entorno, y cómo se restaura un backup: [docs/deploy.md](docs/deploy.md). Revisión de seguridad: [docs/seguridad.md](docs/seguridad.md).
