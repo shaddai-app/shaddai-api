@@ -55,6 +55,7 @@ model Account {
   networks             Network[]
   zones                Zone[]
   cells                Cell[]
+  announcements        Announcement[]
   cellReports          CellReport[]
   cellMultiplications  CellMultiplication[]
   consolidationSteps   ConsolidationStep[]

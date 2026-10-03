@@ -35,6 +35,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   notifications       Notification[]
   totpRecoveryCodes   TotpRecoveryCode[]
+  announcements       Announcement[]
 
   @@index([accountId, isActive])
   @@index([personId])

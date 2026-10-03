@@ -1,0 +1,35 @@
+// Anuncios de la iglesia. Sin audiencias = para todos los usuarios; con audiencias, para quien tenga
+// alguno de esos roles, sirva en alguno de esos ministerios o sea de alguna de esas sedes.
+// publishAt/expiresAt son instantes (UTC): un anuncio programado se publica solo (programador).
+model Announcement {
+  id          Int                    @id @default(autoincrement())
+  accountId   Int
+  account     Account                @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  title       String                 @db.NVarChar(150)
+  body        String                 @db.NVarChar(4000)
+  publishAt   DateTime
+  expiresAt   DateTime?
+  pinned      Boolean                @default(false)
+  // Avisar en el centro de notificaciones al publicarse. notifiedAt: ya se avisó (una sola vez).
+  notify      Boolean                @default(true)
+  notifiedAt  DateTime?
+  createdById Int
+  createdBy   User                   @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  deletedAt   DateTime?
+  audiences   AnnouncementAudience[]
+
+  @@index([accountId, publishAt])
+}
+
+model AnnouncementAudience {
+  id             Int          @id @default(autoincrement())
+  announcementId Int
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  kind           String       @db.VarChar(10) // role|ministry|campus
+  refId          Int
+
+  @@index([announcementId])
+  @@index([kind, refId])
+}

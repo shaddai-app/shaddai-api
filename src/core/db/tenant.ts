@@ -57,6 +57,7 @@ export const TENANT_MODELS = new Set([
   'InventoryLoan',
   'Notification',
   'DailyJobRun',
+  'Announcement',
 ]);
 
 /** relación -> { fk, modelo padre } */
@@ -66,6 +67,7 @@ export const CHILD_MODELS: Record<string, Record<string, { fk: string; parent: s
   RefreshToken: { user: { fk: 'userId', parent: 'User' } },
   PasswordResetToken: { user: { fk: 'userId', parent: 'User' } },
   TotpRecoveryCode: { user: { fk: 'userId', parent: 'User' } },
+  AnnouncementAudience: { announcement: { fk: 'announcementId', parent: 'Announcement' } },
   PersonTag: { person: { fk: 'personId', parent: 'Person' }, tag: { fk: 'tagId', parent: 'Tag' } },
   ConsolidationCaseStep: {
     case: { fk: 'caseId', parent: 'ConsolidationCase' },

@@ -41,6 +41,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoInventory(prisma, existing.id);
     await seedDemoLoans(prisma, existing.id);
     await seedDemoNotifications(prisma, existing.id);
+    await seedDemoAnnouncements(prisma, existing.id);
     return;
   }
 
@@ -96,6 +97,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoInventory(prisma, account.id);
   await seedDemoLoans(prisma, account.id);
   await seedDemoNotifications(prisma, account.id);
+  await seedDemoAnnouncements(prisma, account.id);
 }
 
 /**
@@ -1104,6 +1106,65 @@ async function seedDemoNotifications(prisma: PrismaClient, accountId: number) {
     },
   });
   console.log('✔ Aviso de ejemplo para el admin de la demo');
+}
+
+async function seedDemoAnnouncements(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.announcement.count({ where: { accountId } })) > 0) return;
+  const pastor = await prisma.user.findFirstOrThrow({
+    where: { accountId, email: 'demo-pastor@shaddai.local' },
+  });
+  const worship = await prisma.ministry.findFirst({ where: { accountId, kind: 'worship', deletedAt: null } });
+  const day = 86_400_000;
+  const now = Date.now();
+  // Ya publicados: marcados como avisados para que el programador no los mande al levantar la API.
+  const published = { notify: true, notifiedAt: new Date(now) };
+  await prisma.announcement.create({
+    data: {
+      accountId,
+      createdById: pastor.id,
+      title: 'Retiro de jóvenes: inscripciones abiertas',
+      body: 'Del 14 al 16 de noviembre en el campamento de Pilar. Los cupos son limitados: anotate desde el calendario o hablá con tu líder de célula.',
+      publishAt: new Date(now - 2 * day),
+      expiresAt: new Date(now + 30 * day),
+      pinned: true,
+      ...published,
+    },
+  });
+  await prisma.announcement.create({
+    data: {
+      accountId,
+      createdById: pastor.id,
+      title: 'Nuevo horario de oración',
+      body: 'Desde este martes la reunión de oración pasa a las 19:30.\nGracias por acompañar.',
+      publishAt: new Date(now - 5 * day),
+      ...published,
+    },
+  });
+  if (worship) {
+    await prisma.announcement.create({
+      data: {
+        accountId,
+        createdById: pastor.id,
+        title: 'Ensayo general el sábado',
+        body: 'Para el equipo de alabanza: ensayo general el sábado a las 17 en el templo.',
+        publishAt: new Date(now - day),
+        expiresAt: new Date(now + 6 * day),
+        audiences: { create: [{ kind: 'ministry', refId: worship.id }] },
+        ...published,
+      },
+    });
+  }
+  // Programado: el programador lo publica y lo avisa cuando llegue la fecha.
+  await prisma.announcement.create({
+    data: {
+      accountId,
+      createdById: pastor.id,
+      title: 'Cena de fin de año',
+      body: 'Reservá la fecha: viernes 12 de diciembre. Más información pronto.',
+      publishAt: new Date(now + 3 * day),
+    },
+  });
+  console.log('✔ Anuncios de ejemplo');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {
