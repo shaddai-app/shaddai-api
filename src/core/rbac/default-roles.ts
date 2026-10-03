@@ -86,6 +86,7 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'finanzas.diezmos_nominales',
       'inventario.ver',
       'anuncios.gestionar',
+      'oracion.pastoral',
       'usuarios.ver',
       'roles.ver',
     ]),
