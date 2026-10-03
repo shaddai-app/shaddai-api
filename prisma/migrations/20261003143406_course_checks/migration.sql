@@ -1,0 +1,3 @@
+-- Restricciones que Prisma no expresa: estado conocido y fechas coherentes con el estado.
+EXEC('ALTER TABLE [dbo].[CourseEnrollment] ADD CONSTRAINT [CourseEnrollment_status_ck] CHECK ([status] IN (''active'', ''completed'', ''dropped''))');
+EXEC('ALTER TABLE [dbo].[CourseEnrollment] ADD CONSTRAINT [CourseEnrollment_dates_ck] CHECK (([status] = ''completed'' AND [completedAt] IS NOT NULL AND [droppedAt] IS NULL AND [completedAt] >= [enrolledAt]) OR ([status] = ''dropped'' AND [droppedAt] IS NOT NULL AND [completedAt] IS NULL AND [droppedAt] >= [enrolledAt]) OR ([status] = ''active'' AND [completedAt] IS NULL AND [droppedAt] IS NULL))');

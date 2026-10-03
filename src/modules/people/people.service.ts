@@ -870,6 +870,21 @@ export async function mergePeople(viewer: Viewer, sourceId: number, intoId: numb
       where: { borrowerPersonId: sourceId },
       data: { borrowerPersonId: intoId },
     });
+    // Discipulado: si las dos estaban activas en el mismo nivel, la de la origen se borra.
+    const targetLevels = (
+      await tx.courseEnrollment.findMany({
+        where: { personId: intoId, status: 'active' },
+        select: { levelId: true },
+      })
+    ).map((e) => e.levelId);
+    await tx.courseEnrollment.deleteMany({
+      where: { personId: sourceId, status: 'active', levelId: { in: targetLevels } },
+    });
+    await tx.courseEnrollment.updateMany({ where: { personId: sourceId }, data: { personId: intoId } });
+    await tx.courseLevel.updateMany({
+      where: { teacherPersonId: sourceId },
+      data: { teacherPersonId: intoId },
+    });
     await tx.personTag.deleteMany({ where: { personId: sourceId } });
     if (newTags.length) {
       await tx.personTag.createMany({ data: newTags.map((tagId) => ({ personId: intoId, tagId })) });

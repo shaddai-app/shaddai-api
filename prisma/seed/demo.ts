@@ -43,6 +43,7 @@ export async function seedDemo(prisma: PrismaClient) {
     await seedDemoNotifications(prisma, existing.id);
     await seedDemoAnnouncements(prisma, existing.id);
     await seedDemoPrayerRequests(prisma, existing.id);
+    await seedDemoCourses(prisma, existing.id);
     return;
   }
 
@@ -100,6 +101,7 @@ export async function seedDemo(prisma: PrismaClient) {
   await seedDemoNotifications(prisma, account.id);
   await seedDemoAnnouncements(prisma, account.id);
   await seedDemoPrayerRequests(prisma, account.id);
+  await seedDemoCourses(prisma, account.id);
 }
 
 /**
@@ -1167,6 +1169,77 @@ async function seedDemoAnnouncements(prisma: PrismaClient, accountId: number) {
     },
   });
   console.log('✔ Anuncios de ejemplo');
+}
+
+/**
+ * Discipulado de ejemplo: Escuela de líderes (3 niveles, el primero lo da el líder demo) con
+ * inscripciones activas, completadas y una baja, y Clases de bautismo. Idempotente.
+ */
+async function seedDemoCourses(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.course.count({ where: { accountId } })) > 0) return;
+  const milestone = async (systemKey: string) =>
+    (await prisma.catalogItem.findFirst({ where: { accountId, type: 'milestone', systemKey } }))?.id ?? null;
+  const leader = await prisma.user.findFirst({ where: { accountId, email: 'demo-lider@shaddai.local' } });
+  // Adultos, sin contar al maestro del primer nivel.
+  const people = await prisma.person.findMany({
+    where: {
+      accountId,
+      deletedAt: null,
+      birthDate: { lt: new Date('2008-01-01') },
+      ...(leader?.personId ? { id: { not: leader.personId } } : {}),
+    },
+    orderBy: { id: 'asc' },
+    take: 12,
+  });
+  const day = 86_400_000;
+  const date = (daysAgo: number) =>
+    new Date(`${new Date(Date.now() - daysAgo * day).toISOString().slice(0, 10)}T00:00:00Z`);
+
+  const school = await prisma.course.create({
+    data: {
+      accountId,
+      name: 'Escuela de líderes',
+      description: 'Formación para quienes van a liderar una célula. Tres niveles de un trimestre cada uno.',
+      milestoneTypeId: await milestone('leaders_school'),
+      levels: {
+        create: [
+          {
+            accountId,
+            name: 'Nivel 1: Fundamentos',
+            sortOrder: 10,
+            teacherPersonId: leader?.personId ?? null,
+          },
+          { accountId, name: 'Nivel 2: Vida de célula', sortOrder: 20 },
+          { accountId, name: 'Nivel 3: Liderazgo', sortOrder: 30 },
+        ],
+      },
+    },
+    include: { levels: { orderBy: { sortOrder: 'asc' } } },
+  });
+  const [n1, n2] = school.levels;
+  const enroll = (levelId: number, personId: number, enrolledDaysAgo: number, extra = {}) =>
+    prisma.courseEnrollment.create({
+      data: { accountId, levelId, personId, enrolledAt: date(enrolledDaysAgo), ...extra },
+    });
+  for (const p of people.slice(0, 5)) await enroll(n1!.id, p.id, 40);
+  for (const p of people.slice(5, 8)) {
+    await enroll(n1!.id, p.id, 130, { status: 'completed', completedAt: date(45) });
+    await enroll(n2!.id, p.id, 40);
+  }
+  if (people[8]) await enroll(n1!.id, people[8].id, 130, { status: 'dropped', droppedAt: date(90) });
+
+  const baptism = await prisma.course.create({
+    data: {
+      accountId,
+      name: 'Clases de bautismo',
+      description: 'Cuatro encuentros antes del bautismo.',
+      milestoneTypeId: await milestone('water_baptism'),
+      levels: { create: [{ accountId, name: 'Clases', sortOrder: 10 }] },
+    },
+    include: { levels: true },
+  });
+  for (const p of people.slice(9, 12)) await enroll(baptism.levels[0]!.id, p.id, 10);
+  console.log('✔ Cursos de discipulado de ejemplo');
 }
 
 /** Peticiones de oración de ejemplo: públicas (una anónima y una respondida) y una para pastores. */

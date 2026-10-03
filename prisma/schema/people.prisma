@@ -83,7 +83,9 @@ model Person {
   serviceAssignments  ServiceAssignment[]
   unavailabilities    Unavailability[]
 
-  inventoryLoans InventoryLoan[]
+  inventoryLoans    InventoryLoan[]
+  courseEnrollments CourseEnrollment[]
+  teachesLevels     CourseLevel[]      @relation("CourseTeacher")
 
   @@index([accountId, deletedAt, lastName, firstName])
   @@index([accountId, statusId])
