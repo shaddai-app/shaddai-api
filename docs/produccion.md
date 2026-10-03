@@ -2,6 +2,8 @@
 
 Este documento registra **qué se eligió para producción, por qué y qué falta hacer**. Es la fuente de verdad: si cambia una decisión o un paso, se actualiza acá en el mismo PR.
 
+**El orden de los pasos** (qué va primero, quién lo hace) está en [camino-a-produccion.md](camino-a-produccion.md). Usar la app en local y presentarla: [uso-local.md](uso-local.md).
+
 Decidido el **2 de octubre de 2026** (Fase 8). Los precios son aproximados a esa fecha: confirmarlos en cada proveedor antes de contratar.
 
 ## Resumen
@@ -138,6 +140,12 @@ Los CNAME hacia Azure van con el proxy de Cloudflare **apagado** (nube gris), as
 - [x] Tramo 3: páginas de privacidad y términos (borrador), exportación de datos de la iglesia, baja de cuenta con purga a los 90 días.
 - [x] Tramo 4: Dockerfile, infraestructura en Bicep, deploy desde CI a staging y producción, usuarios de base de migración y de app, backup y restauración probada en local, escaneo ZAP. **Guía paso a paso: [deploy.md](deploy.md).**
 - [ ] Armar staging y producción siguiendo [deploy.md](deploy.md) (necesita las cuentas de arriba y el dominio).
+
+### Lo hace Claude en el código (Fase 9)
+
+- [x] 2FA para todos los usuarios, anuncios, peticiones de oración, discipulado (cursos, niveles, inscripciones, clases y asistencia) y cobro con Mercado Pago detrás de una interfaz de proveedor (shaddai-app/shaddai-api#38 a #43).
+- [ ] Prueba del cobro en el sandbox de Mercado Pago (necesita las credenciales de prueba).
+- [ ] Fusión de personas: mover también ministerios, turnos, inscripciones a eventos y diezmos nominales.
 - [ ] Simulacro de restauración en Azure (deploy.md, sección 6). Último: —
 
 ## Pendientes de decidir
