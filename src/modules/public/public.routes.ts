@@ -13,6 +13,7 @@ import { CONSENT_VERSION, dateOnly } from '../people/people.schemas.js';
 import { normalizePhone } from '../people/people.service.js';
 import { createRegistration, publicEvent } from '../calendar/registrations.service.js';
 import { runInContext } from '../../core/context.js';
+import { DEFAULT_TRIAL_DAYS } from '../platform/platform.schemas.js';
 
 /** Endpoints sin sesión. Nunca revelan si una iglesia existe pero está suspendida. */
 export const publicRouter = Router();
@@ -39,6 +40,19 @@ async function publicAccount(req: Request) {
   }
   return account;
 }
+
+/** Planes para la landing: solo lo que se muestra al público (nada de ids ni precio en dólares). */
+publicRouter.get('/public/plans', publicReadLimiter, async (_req, res) => {
+  const plans = await prisma.plan.findMany({
+    where: { isActive: true },
+    orderBy: [{ userLimit: 'asc' }, { id: 'asc' }],
+    select: { code: true, name: true, userLimit: true, storageLimitMb: true, priceArs: true },
+  });
+  res.json({
+    items: plans.map((p) => ({ ...p, priceArs: p.priceArs === null ? null : Number(p.priceArs) })),
+    trialDays: DEFAULT_TRIAL_DAYS,
+  });
+});
 
 publicRouter.get('/public/:slug/newcomer-form', publicReadLimiter, async (req, res) => {
   const account = await publicAccount(req);

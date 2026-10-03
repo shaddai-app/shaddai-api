@@ -12,6 +12,11 @@ export const LoginSchema = z.object({
   rememberMe: z.boolean().default(false),
 });
 
+/** Ingreso a la demo: solo el perfil; el mail sale de DEMO_USERS en el servidor. */
+export const DemoLoginSchema = z
+  .object({ role: z.enum(['admin', 'pastor', 'treasurer', 'cell_leader']) })
+  .strict();
+
 export const TwoFactorVerifySchema = z.object({
   challengeToken: z.string().min(1),
   code: z.string().trim().max(20), // 6 dígitos de la app o un código de recuperación

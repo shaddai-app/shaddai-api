@@ -19,6 +19,7 @@ import {
   signAccessFor,
   type IssuedSession,
 } from './session.service.js';
+import { DEMO_ACCOUNT_ID, DEMO_USERS } from '../platform/demo/constants.js';
 import { checkSecondFactor, issueRecoveryCodes, sendSecurityAlert } from './two-factor.js';
 
 const RESET_TOKEN_TTL_MS = 30 * 60_000;
@@ -41,6 +42,8 @@ function findLoginUser(where: { email: string } | { id: number }) {
 // Hash fijo para que un email inexistente tarde lo mismo que uno válido (evita enumerar usuarios).
 let dummyHash: Promise<string> | undefined;
 const getDummyHash = () => (dummyHash ??= hashPassword('shaddai-dummy-password-for-timing'));
+
+export type DemoRole = (typeof DEMO_USERS)[number]['role'];
 
 export type LoginResult =
   { requires2fa: true; challengeToken: string } | ({ requires2fa: false } & IssuedSession);
@@ -86,7 +89,11 @@ async function registerFailure(user: LoginUser, reason: string): Promise<never> 
   throw AppError.unauthorized(reason === 'totp' ? 'AUTH_INVALID_CODE' : 'AUTH_INVALID_CREDENTIALS');
 }
 
-async function completeLogin(user: LoginUser, rememberMe: boolean): Promise<IssuedSession> {
+async function completeLogin(
+  user: LoginUser,
+  rememberMe: boolean,
+  extra?: { demo: true },
+): Promise<IssuedSession> {
   await prisma.user.update({
     where: { id: user.id },
     data: { failedLoginCount: 0, lockoutLevel: 0, lockedUntil: null, lastLoginAt: new Date() },
@@ -98,6 +105,7 @@ async function completeLogin(user: LoginUser, rememberMe: boolean): Promise<Issu
     entityId: user.id,
     userId: user.id,
     accountId: user.accountId,
+    ...(extra && { after: extra }),
   });
   return session;
 }
@@ -130,6 +138,27 @@ export async function login(input: {
     };
   }
   return { requires2fa: false, ...(await completeLogin(user, input.rememberMe)) };
+}
+
+/**
+ * Ingreso a la demo con un clic (botón "Probar la demo" de la landing). No pide contraseña: la de la
+ * demo es pública, y así un visitante que se equivocó cinco veces en el login no deja a los demás
+ * afuera (completeLogin resetea el bloqueo). Solo los 4 usuarios demo de la cuenta demo.
+ */
+export async function demoLogin(role: DemoRole): Promise<IssuedSession> {
+  const demoUser = DEMO_USERS.find((u) => u.role === role)!;
+  const user = await findLoginUser({ email: demoUser.email });
+  const available =
+    user &&
+    user.accountId === DEMO_ACCOUNT_ID &&
+    (await isDemoAccount(user.accountId)) &&
+    user.account &&
+    ['active', 'trial', 'past_due'].includes(user.account.status) &&
+    user.isActive &&
+    !user.deletedAt &&
+    !user.totpEnabled;
+  if (!available) throw AppError.notFound('DEMO_UNAVAILABLE');
+  return completeLogin(user, false, { demo: true });
 }
 
 export async function verifyTwoFactor(input: {

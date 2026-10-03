@@ -24,6 +24,12 @@ function limiter(name: string, windowMs: number, limit: number, overrides: Parti
 /** Login y verificación 2FA: 10 intentos por minuto por IP (el bloqueo por usuario va aparte). */
 export const loginLimiter = limiter('login', 60_000, 10);
 
+/**
+ * Ingreso a la demo con un clic: más holgado que el login porque en una presentación entran muchos
+ * desde la misma red, y no hay contraseña que adivinar.
+ */
+export const demoLoginLimiter = limiter('demo-login', 60_000, 20);
+
 /** Olvidé / reset de contraseña: 5 cada 15 minutos por IP. */
 export const passwordResetLimiter = limiter('password', 15 * 60_000, 5);
 
