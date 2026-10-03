@@ -18,6 +18,7 @@ import {
   signAccessFor,
   type IssuedSession,
 } from './session.service.js';
+import { checkSecondFactor, issueRecoveryCodes, sendSecurityAlert } from './two-factor.js';
 
 const RESET_TOKEN_TTL_MS = 30 * 60_000;
 
@@ -120,7 +121,8 @@ export async function login(input: {
   if (!(await verifyPassword(user.passwordHash, input.password))) return registerFailure(user, 'password');
   assertCanHoldSession(user);
 
-  if (user.isPlatformAdmin && user.totpEnabled) {
+  // Con la verificación en dos pasos activa (obligatoria para el superadmin, optativa para el resto).
+  if (user.totpEnabled) {
     return {
       requires2fa: true,
       challengeToken: await signTwoFactorChallenge({ sub: String(user.id), rm: input.rememberMe }),
@@ -138,9 +140,19 @@ export async function verifyTwoFactor(input: {
   const user = await findLoginUser({ id: Number(claims.sub) });
   if (!user?.totpEnabled || !user.totpSecretEnc) throw AppError.unauthorized('AUTH_2FA_CHALLENGE_INVALID');
   assertNotLocked(user);
-  if (!(await verifyTotp(decryptSecret(user.totpSecretEnc), input.code)))
-    return registerFailure(user, 'totp');
+  const factor = await checkSecondFactor(user, input.code);
+  if (!factor) return registerFailure(user, 'totp');
   assertCanHoldSession(user);
+  if (factor === 'recovery') {
+    await audit({
+      action: 'auth.totp.recovery_used',
+      entity: 'User',
+      entityId: user.id,
+      userId: user.id,
+      accountId: user.accountId,
+    });
+    await sendSecurityAlert(user, 'recovery_code_used');
+  }
   return completeLogin(user, claims.rm);
 }
 
@@ -297,5 +309,43 @@ export async function confirmTotpEnrollment(userId: number, sessionFamilyId: str
     select: sessionUserSelect,
   });
   await audit({ action: 'auth.totp.enabled', entity: 'User', entityId: userId });
-  return { accessToken: await signAccessFor(updated, sessionFamilyId) };
+  return {
+    accessToken: await signAccessFor(updated, sessionFamilyId),
+    recoveryCodes: await issueRecoveryCodes(userId),
+  };
+}
+
+/** Comprueba la contraseña actual antes de un cambio de seguridad (sin contar para el bloqueo). */
+async function assertCurrentPassword(userId: number, password: string) {
+  const user = await findLoginUser({ id: userId });
+  if (!user) throw AppError.unauthorized('AUTH_REQUIRED');
+  if (!(await verifyPassword(user.passwordHash, password)))
+    throw AppError.badRequest('PASSWORD_CURRENT_INVALID');
+  return user;
+}
+
+/**
+ * Desactiva la verificación en dos pasos: contraseña + un código (de la app o de recuperación). El
+ * superadmin no puede: para él es obligatoria.
+ */
+export async function disableTotp(userId: number, input: { password: string; code: string }) {
+  const user = await assertCurrentPassword(userId, input.password);
+  if (user.isPlatformAdmin) throw AppError.forbidden('TOTP_REQUIRED_FOR_PLATFORM_ADMIN');
+  if (!user.totpEnabled) throw AppError.conflict('TOTP_NOT_ENABLED');
+  if (!(await checkSecondFactor(user, input.code))) throw AppError.badRequest('AUTH_INVALID_CODE');
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { totpEnabled: false, totpSecretEnc: null } }),
+    prisma.totpRecoveryCode.deleteMany({ where: { userId } }),
+  ]);
+  await audit({ action: 'auth.totp.disabled', entity: 'User', entityId: userId });
+  await sendSecurityAlert(user, 'totp_disabled');
+}
+
+/** Nuevos códigos de recuperación (los anteriores dejan de servir). Pide la contraseña. */
+export async function regenerateRecoveryCodes(userId: number, password: string) {
+  const user = await assertCurrentPassword(userId, password);
+  if (!user.totpEnabled) throw AppError.conflict('TOTP_NOT_ENABLED');
+  const recoveryCodes = await issueRecoveryCodes(userId);
+  await audit({ action: 'auth.totp.recovery_regenerated', entity: 'User', entityId: userId });
+  return { recoveryCodes };
 }

@@ -7,6 +7,7 @@ import { parse } from '../../core/http/validate.js';
 import { authenticate, authOf, forbidImpersonation } from '../../core/middleware/authenticate.js';
 import { resolvePermissions } from '../../core/rbac/resolve.js';
 import { listActiveSessions, revokeFamily } from '../auth/session.service.js';
+import { recoveryCodesLeft } from '../auth/two-factor.js';
 
 export const meRouter = Router();
 
@@ -51,7 +52,8 @@ async function loadMe(userId: number) {
     },
   });
   const { account, ...rest } = user;
-  return { user: rest, account };
+  const totpRecoveryCodesLeft = user.totpEnabled ? await recoveryCodesLeft(userId) : 0;
+  return { user: { ...rest, totpRecoveryCodesLeft }, account };
 }
 
 // Permitido con sesión restringida: el front lo necesita para saber a qué pantalla mandar al usuario.

@@ -41,6 +41,7 @@ export const ACCOUNT_DATA: readonly { model: string; export: boolean }[] = [
   { model: 'ConsolidationStep', export: true },
   { model: 'RefreshToken', export: false },
   { model: 'PasswordResetToken', export: false },
+  { model: 'TotpRecoveryCode', export: false },
   { model: 'UserRole', export: true },
   { model: 'RolePermission', export: true },
   { model: 'Role', export: true },

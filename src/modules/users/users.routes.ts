@@ -43,6 +43,10 @@ t.post('/users/:id/unlock', 'usuarios.gestionar', async (req, res) => {
   res.json(await users.unlock(parse(IdParam, req.params).id));
 });
 
+t.post('/users/:id/reset-2fa', 'usuarios.resetear', async (req, res) => {
+  res.json(await users.resetTwoFactor(authOf(req).userId, parse(IdParam, req.params).id));
+});
+
 t.post('/users/:id/reset-password', 'usuarios.resetear', async (req, res) => {
   const { sendAccessEmail } = parse(ResetPasswordSchema, req.body ?? {});
   res.json(await users.resetPassword(authOf(req).userId, parse(IdParam, req.params).id, sendAccessEmail));

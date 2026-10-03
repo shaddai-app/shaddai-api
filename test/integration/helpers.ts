@@ -50,6 +50,7 @@ export async function resetDb() {
   await prisma.consolidationStep.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.passwordResetToken.deleteMany();
+  await prisma.totpRecoveryCode.deleteMany();
   await prisma.userRole.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.role.deleteMany();

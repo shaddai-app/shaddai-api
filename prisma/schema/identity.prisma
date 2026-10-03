@@ -34,6 +34,7 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   notifications       Notification[]
+  totpRecoveryCodes   TotpRecoveryCode[]
 
   @@index([accountId, isActive])
   @@index([personId])
@@ -112,6 +113,19 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique @db.Char(64)
   expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Códigos de recuperación de la verificación en dos pasos (si se pierde el celular). Se guardan
+// hasheados, cada uno sirve una vez y se regeneran todos juntos.
+model TotpRecoveryCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  codeHash  String    @db.Char(64)
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
