@@ -46,6 +46,7 @@ const definitions = {
     reportes: false,
   },
   inventario: { ver: false, gestionar: false, prestamos: false },
+  anuncios: { gestionar: false },
   usuarios: { ver: false, gestionar: false, resetear: false },
   roles: { ver: false, gestionar: false },
   cuenta: { configurar: false },

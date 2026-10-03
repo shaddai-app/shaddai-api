@@ -189,6 +189,27 @@ export const NOTIFICATION_TYPES = {
       },
     },
   },
+  // Anuncio publicado, a su audiencia. Por mail solo si el usuario lo pide en sus preferencias.
+  'announcement.published': {
+    email: false,
+    mail: {
+      es: {
+        subject: (p) => `Anuncio: ${s(p.title)}`,
+        body: (p) => [`${s(p.author)} publicó un anuncio: «${s(p.title)}».`],
+        action: 'Leer el anuncio',
+      },
+      en: {
+        subject: (p) => `Announcement: ${s(p.title)}`,
+        body: (p) => [`${s(p.author)} posted an announcement: “${s(p.title)}”.`],
+        action: 'Read the announcement',
+      },
+      pt: {
+        subject: (p) => `Anúncio: ${s(p.title)}`,
+        body: (p) => [`${s(p.author)} publicou um anúncio: «${s(p.title)}».`],
+        action: 'Ler o anúncio',
+      },
+    },
+  },
 } satisfies Record<string, TypeDef>;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
@@ -212,7 +233,7 @@ export function formatters(locale: MailLocale): Formatters {
   });
   return {
     date: (iso) =>
-      typeof iso === 'string' && /^d{4}-d{2}-d{2}$/.test(iso)
+      typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso)
         ? dateFmt.format(new Date(`${iso}T00:00:00Z`))
         : '',
     dateTime: (local) => {

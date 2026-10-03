@@ -4,6 +4,7 @@ import { prisma } from '../core/db/prisma.js';
 import { purgeExpiredRateLimits } from '../core/db/rate-limit-store.js';
 import { logger } from '../core/logger.js';
 import { reportError } from '../core/observability/sentry.js';
+import { publishDueAnnouncements } from '../modules/announcements/announcements.service.js';
 import { runDailyNotices } from '../modules/notifications/daily.js';
 
 // Procesos programados dentro de la API (sin cron externo). Cada 10 minutos revisa qué iglesias ya
@@ -37,6 +38,23 @@ export async function tickDailyNotices(now = new Date()) {
   }
 }
 
+/** Anuncios programados que ya llegaron a su fecha: se avisan a su audiencia. */
+export async function tickAnnouncements(now = new Date()) {
+  const accounts = await prisma.account.findMany({
+    where: { status: { in: LIVE_STATUSES } },
+    select: { id: true },
+  });
+  for (const account of accounts) {
+    try {
+      const sent = await publishDueAnnouncements(account.id, now);
+      if (sent) logger.info({ accountId: account.id, sent }, 'scheduled announcements published');
+    } catch (err) {
+      logger.error({ err, accountId: account.id }, 'scheduled announcements failed');
+      reportError(err, { job: 'announcements', accountId: account.id });
+    }
+  }
+}
+
 /** Borra definitivamente las iglesias dadas de baja hace más de 90 días. */
 export async function purgeClosedAccounts(now = new Date()) {
   try {
@@ -56,6 +74,7 @@ export function startJobs(): () => void {
     running = true;
     try {
       await tickDailyNotices();
+      await tickAnnouncements();
       await purgeExpiredRateLimits();
       await purgeClosedAccounts();
     } catch (err) {
