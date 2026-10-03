@@ -75,10 +75,6 @@ param mpAccessToken string = ''
 @secure()
 param mpWebhookSecret string = ''
 
-@description('Contraseña de los usuarios de la iglesia demo (cuenta 1, 12+ caracteres): la usan el seed y el restablecimiento de la demo.')
-@secure()
-param seedDemoPassword string
-
 param geocodingProvider string = 'none'
 @secure()
 param geocodingApiKey string = ''
@@ -207,7 +203,6 @@ var commonEnv = [
   { name: 'BILLING_PROVIDER', value: billingProvider }
   { name: 'MP_ACCESS_TOKEN', secretRef: 'mp-access-token' }
   { name: 'MP_WEBHOOK_SECRET', secretRef: 'mp-webhook-secret' }
-  { name: 'SEED_DEMO_PASSWORD', secretRef: 'seed-demo-password' }
 ]
 
 var commonSecrets = [
@@ -223,7 +218,6 @@ var commonSecrets = [
   { name: 'geocoding-api-key', value: empty(geocodingApiKey) ? ' ' : geocodingApiKey }
   { name: 'mp-access-token', value: empty(mpAccessToken) ? ' ' : mpAccessToken }
   { name: 'mp-webhook-secret', value: empty(mpWebhookSecret) ? ' ' : mpWebhookSecret }
-  { name: 'seed-demo-password', value: seedDemoPassword }
 ]
 
 var registries = [

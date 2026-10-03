@@ -4,6 +4,7 @@ import {
   DEMO_ACCOUNT_DEFAULTS,
   DEMO_ACCOUNT_ID,
   DEMO_ADMIN_EMAIL,
+  DEMO_PASSWORD,
   DEMO_SLUG,
   DEMO_USERS,
 } from '../../src/modules/platform/demo/constants.js';
@@ -13,14 +14,11 @@ import { syncDemoUsers } from '../../src/modules/platform/demo/users.js';
 /**
  * Iglesia demo (SEED_DEMO=true), también en producción: la cuenta 1, compartida por los clientes que
  * prueban Shaddai. Tiene que ser lo primero que se crea para quedar con id 1. Usuarios demo con
- * SEED_DEMO_PASSWORD. Si ya existe, completa los datos de ejemplo que falten (idempotente); para
+ * DEMO_PASSWORD (pública). Si ya existe, completa los datos de ejemplo que falten (idempotente); para
  * dejarla como nueva está el restablecimiento del panel de plataforma.
  */
 export async function seedDemo(prisma: PrismaClient) {
   if (process.env.SEED_DEMO !== 'true') return;
-  const password = process.env.SEED_DEMO_PASSWORD;
-  if (!password || password.length < 12)
-    throw new Error('Definí SEED_DEMO_PASSWORD (12+ caracteres) en .env');
 
   const existing = await prisma.account.findUnique({ where: { slug: DEMO_SLUG } });
   if (existing) {
@@ -48,7 +46,7 @@ export async function seedDemo(prisma: PrismaClient) {
       `⚠ La iglesia demo quedó con id ${account.id} (se espera ${DEMO_ACCOUNT_ID}): el restablecimiento no la va a encontrar.`,
     );
   }
-  await syncDemoUsers(prisma, account.id, await hashPassword(password));
-  console.log(`✔ Iglesia demo creada con ${DEMO_USERS.length} usuarios (contraseña: SEED_DEMO_PASSWORD)`);
+  await syncDemoUsers(prisma, account.id, await hashPassword(DEMO_PASSWORD));
+  console.log(`✔ Iglesia demo creada con ${DEMO_USERS.length} usuarios (contraseña pública: DEMO_PASSWORD)`);
   await seedDemoData(prisma, account.id);
 }

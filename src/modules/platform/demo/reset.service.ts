@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { env, isProd } from '../../../config/env.js';
+import { isProd } from '../../../config/env.js';
 import { audit } from '../../../core/audit/audit.js';
 import { hashPassword } from '../../../core/auth/password.js';
 import { wipeAccountData } from '../../../core/db/account-data.js';
@@ -12,6 +12,7 @@ import {
   DEMO_ACCOUNT_DEFAULTS,
   DEMO_ACCOUNT_ID,
   DEMO_ADMIN_EMAIL,
+  DEMO_PASSWORD,
   DEMO_SLUG,
   DEMO_USERS,
   QA_USERS,
@@ -33,15 +34,13 @@ const sameSecret = (a: string, b: string) =>
  * (configuración, roles, catálogos, usuarios demo y datos de ejemplo con fechas relativas a hoy).
  *
  * Para no tocar nunca otra iglesia pide las credenciales de la demo (mail del admin demo y
- * SEED_DEMO_PASSWORD de la configuración, no la de la base: un visitante puede cambiarla) y verifica
+ * DEMO_PASSWORD, no la de la base: un visitante puede cambiarla) y verifica
  * que el id de la pantalla, el del usuario de esas credenciales y la cuenta 1 con slug iglesia-demo
  * sean la misma cuenta. Sin transacción global (el seed usa servicios con su propio cliente): si se
  * corta, se vuelve a correr.
  */
 export async function resetDemoAccount(input: DemoResetInput, actorUserId: number) {
-  const expected = env.SEED_DEMO_PASSWORD;
-  if (!expected) throw AppError.conflict('DEMO_PASSWORD_MISSING');
-  if (input.email.trim().toLowerCase() !== DEMO_ADMIN_EMAIL || !sameSecret(input.password, expected)) {
+  if (input.email.trim().toLowerCase() !== DEMO_ADMIN_EMAIL || !sameSecret(input.password, DEMO_PASSWORD)) {
     await audit({
       action: 'platform.demo.reset_denied',
       entity: 'Account',
@@ -120,7 +119,7 @@ export async function resetDemoAccount(input: DemoResetInput, actorUserId: numbe
       { timeout: 20_000 },
     );
 
-    await syncDemoUsers(prisma, DEMO_ACCOUNT_ID, await hashPassword(expected), { includeQa: !isProd });
+    await syncDemoUsers(prisma, DEMO_ACCOUNT_ID, await hashPassword(DEMO_PASSWORD), { includeQa: !isProd });
     invalidateAllPermissions();
     await seedDemoData(prisma, DEMO_ACCOUNT_ID);
 
