@@ -32,6 +32,7 @@ export async function seedDemoData(prisma: PrismaClient, accountId: number) {
   await seedDemoNotifications(prisma, accountId);
   await seedDemoAnnouncements(prisma, accountId);
   await seedDemoPrayerRequests(prisma, accountId);
+  await seedDemoPrayerForm(prisma, accountId);
   await seedDemoCourses(prisma, accountId);
   await seedDemoCourseSessions(prisma, accountId);
 }
@@ -1274,6 +1275,87 @@ async function seedDemoPrayerRequests(prisma: PrismaClient, accountId: number) {
     [],
   );
   logger.info('✔ Peticiones de oración de ejemplo');
+}
+
+/**
+ * Pedidos de oración del formulario público (sin usuario) con su conversación, y una respuesta del
+ * pastor a una petición de la app. El enlace de quien pidió no se muestra en ningún lado: en la demo
+ * se ve desde el lado del pastor. Idempotente.
+ */
+async function seedDemoPrayerForm(prisma: PrismaClient, accountId: number) {
+  if ((await prisma.prayerRequest.count({ where: { accountId, source: 'form' } })) > 0) return;
+  const { generateOpaqueToken, hashToken } = await import('../../../core/auth/tokens.js');
+  const { encryptSecret } = await import('../../../core/auth/totp.js');
+  const { CONSENT_VERSION } = await import('../../people/people.schemas.js');
+  const { id: pastor } = await prisma.user.findFirstOrThrow({
+    where: { accountId, email: 'demo-pastor@shaddai.local' },
+    select: { id: true },
+  });
+  const day = 86_400_000;
+  const hour = 3_600_000;
+  const now = Date.now();
+  const form = (data: Omit<Prisma.PrayerRequestUncheckedCreateInput, 'accountId' | 'visibility'>) => {
+    const token = generateOpaqueToken();
+    return prisma.prayerRequest.create({
+      data: {
+        accountId,
+        visibility: 'pastors',
+        source: 'form',
+        consentVersion: CONSENT_VERSION,
+        accessTokenHash: hashToken(token),
+        accessTokenEnc: encryptSecret(token),
+        ...data,
+      },
+    });
+  };
+  const reply = (requestId: number, authorId: number | null, body: string, at: number) =>
+    prisma.prayerReply.create({ data: { accountId, requestId, authorId, body, createdAt: new Date(at) } });
+
+  const lucia = await form({
+    body: 'Estoy pasando un momento muy difícil con mi esposo. Necesito que oren por nuestro matrimonio.',
+    requesterName: 'Lucía Fernández',
+    requesterPhone: '+5491155550142',
+    wantsContact: true,
+    wallShare: 'anonymous',
+    createdAt: new Date(now - 2 * day),
+  });
+  await prisma.prayerRequestPrayer.create({ data: { requestId: lucia.id, userId: pastor } });
+  await reply(
+    lucia.id,
+    pastor,
+    'Lucía, estamos orando por ustedes. Si te parece, te llamo el jueves a la tarde para charlar.',
+    now - 2 * day + 3 * hour,
+  );
+  await reply(lucia.id, null, '¡Gracias, pastor! El jueves está perfecto.', now - day - 20 * hour);
+  await form({
+    body: 'Por mi hijo, que empieza el tratamiento la semana que viene.',
+    wallShare: 'named',
+    requesterName: 'Marcos',
+    createdAt: new Date(now - 5 * hour),
+  });
+  const answered = await form({
+    body: 'Por la entrevista de trabajo del martes.',
+    status: 'answered',
+    answeredAt: new Date(now - 3 * day),
+    testimony: '¡Me tomaron! Gracias por orar.',
+    createdAt: new Date(now - 12 * day),
+  });
+  await reply(answered.id, pastor, 'Oramos por vos. ¡Contanos cómo te fue!', now - 11 * day);
+
+  // Una respuesta del pastor a una petición de la app ("solo pastores").
+  const pastoral = await prisma.prayerRequest.findFirst({
+    where: { accountId, source: 'app', visibility: 'pastors' },
+    select: { id: true },
+  });
+  if (pastoral) {
+    await reply(
+      pastoral.id,
+      pastor,
+      'Claro que sí. ¿Te queda bien el miércoles después del culto?',
+      now - day,
+    );
+  }
+  logger.info('✔ Pedidos de oración del formulario de ejemplo');
 }
 
 async function seedDemoConsolidation(prisma: PrismaClient, accountId: number) {

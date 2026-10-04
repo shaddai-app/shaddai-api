@@ -39,6 +39,9 @@ export const refreshLimiter = limiter('refresh', 60_000, 60);
 /** Formularios públicos (Soy nuevo): 5 envíos cada 10 minutos por IP. */
 export const publicFormLimiter = limiter('public-form', 10 * 60_000, 5);
 
+/** Acciones desde el enlace privado de una petición de oración (contestar, marcarla, retirarla). */
+export const publicReplyLimiter = limiter('public-reply', 10 * 60_000, 20);
+
 /** Lecturas públicas (configuración del formulario, logo). */
 export const publicReadLimiter = limiter('public-read', 60_000, 60);
 

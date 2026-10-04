@@ -37,7 +37,9 @@ model User {
   totpRecoveryCodes   TotpRecoveryCode[]
   announcements       Announcement[]
   prayerRequests      PrayerRequest[]
+  prayersContacted    PrayerRequest[]       @relation("PrayerContactedBy")
   prayingFor          PrayerRequestPrayer[]
+  prayerReplies       PrayerReply[]
 
   @@index([accountId, isActive])
   @@index([personId])

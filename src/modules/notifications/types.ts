@@ -244,6 +244,77 @@ export const NOTIFICATION_TYPES = {
       },
     },
   },
+  // A los pastores: alguien sin usuario dejó una petición en el formulario público. Ni el texto ni el
+  // contacto van en el aviso.
+  'prayer.public': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => (p.name ? `Petición de oración de ${s(p.name)}` : 'Nueva petición de oración'),
+        body: (p) => [
+          p.name
+            ? `${s(p.name)} dejó una petición de oración en el formulario de la iglesia.`
+            : 'Alguien dejó una petición de oración en el formulario de la iglesia.',
+          ...(p.wantsContact ? ['Pidió que lo contacten.'] : []),
+        ],
+        action: 'Leer la petición',
+      },
+      en: {
+        subject: (p) => (p.name ? `Prayer request from ${s(p.name)}` : 'New prayer request'),
+        body: (p) => [
+          p.name
+            ? `${s(p.name)} left a prayer request on the church’s form.`
+            : 'Someone left a prayer request on the church’s form.',
+          ...(p.wantsContact ? ['They asked to be contacted.'] : []),
+        ],
+        action: 'Read the request',
+      },
+      pt: {
+        subject: (p) => (p.name ? `Pedido de oração de ${s(p.name)}` : 'Novo pedido de oração'),
+        body: (p) => [
+          p.name
+            ? `${s(p.name)} deixou um pedido de oração no formulário da igreja.`
+            : 'Alguém deixou um pedido de oração no formulário da igreja.',
+          ...(p.wantsContact ? ['Pediu para ser contatado.'] : []),
+        ],
+        action: 'Ler o pedido',
+      },
+    },
+  },
+  // Respuesta escrita en una petición: al autor (mine = 1) o al equipo que la atiende. Sin el texto.
+  // person null = quien pidió por el formulario sin dejar nombre.
+  'prayer.reply': {
+    email: true,
+    mail: {
+      es: {
+        subject: (p) => `${s(p.person) || 'Quien la pidió'} respondió en una petición de oración`,
+        body: (p) => [
+          p.mine
+            ? `${s(p.person)} te respondió en tu petición de oración.`
+            : `${s(p.person) || 'Quien la pidió'} respondió en una petición de oración que atendés.`,
+        ],
+        action: 'Leer la respuesta',
+      },
+      en: {
+        subject: (p) => `${s(p.person) || 'The requester'} replied on a prayer request`,
+        body: (p) => [
+          p.mine
+            ? `${s(p.person)} replied on your prayer request.`
+            : `${s(p.person) || 'The requester'} replied on a prayer request you look after.`,
+        ],
+        action: 'Read the reply',
+      },
+      pt: {
+        subject: (p) => `${s(p.person) || 'Quem pediu'} respondeu em um pedido de oração`,
+        body: (p) => [
+          p.mine
+            ? `${s(p.person)} respondeu no seu pedido de oração.`
+            : `${s(p.person) || 'Quem pediu'} respondeu em um pedido de oração que você acompanha.`,
+        ],
+        action: 'Ler a resposta',
+      },
+    },
+  },
   // A los dueños de la cuenta: venció el pago (más los días de gracia) y quedó en solo lectura.
   'billing.past_due': {
     email: true,

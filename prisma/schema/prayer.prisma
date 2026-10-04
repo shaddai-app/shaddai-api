@@ -2,25 +2,47 @@
 // oracion.pastoral: public = toda la iglesia; pastors = nadie más; leader = el líder y colíder de la
 // célula del autor (se calcula al leer: si cambia de célula, la ve su líder nuevo). anonymous solo
 // aplica a las públicas: oculta el nombre a los demás miembros, no a los pastores.
+//
+// source = form: la dejó alguien sin usuario desde el formulario público (sin createdById). Vuelve a
+// ella con su enlace privado (solo se guarda el hash del token) y deja nombre y contacto opcionales.
+// wallShare es lo que permitió para el muro: null = no se comparte; anonymous | named.
 model PrayerRequest {
-  id          Int                   @id @default(autoincrement())
-  accountId   Int
-  account     Account               @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  body        String                @db.NVarChar(1000)
-  visibility  String                @db.VarChar(10) // public|pastors|leader
-  anonymous   Boolean               @default(false)
-  status      String                @default("open") @db.VarChar(10) // open|answered
-  answeredAt  DateTime?
-  testimony   String?               @db.NVarChar(1000)
-  createdById Int
-  createdBy   User                  @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  deletedAt   DateTime?
-  prayers     PrayerRequestPrayer[]
+  id              Int                   @id @default(autoincrement())
+  accountId       Int
+  account         Account               @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  body            String                @db.NVarChar(1000)
+  visibility      String                @db.VarChar(10) // public|pastors|leader
+  anonymous       Boolean               @default(false)
+  status          String                @default("open") @db.VarChar(10) // open|answered
+  answeredAt      DateTime?
+  testimony       String?               @db.NVarChar(1000)
+  createdById     Int?
+  createdBy       User?                 @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  source          String                @default("app") @db.VarChar(10) // app|form
+  requesterName   String?               @db.NVarChar(150)
+  requesterPhone  String?               @db.VarChar(30)
+  requesterEmail  String?               @db.NVarChar(150)
+  requesterLocale String?               @db.VarChar(5)
+  wantsContact    Boolean               @default(false)
+  wallShare       String?               @db.VarChar(10) // anonymous|named
+  consentVersion  String?               @db.VarChar(10)
+  // El enlace privado: el hash para encontrarla (no único: SQL Server admite un solo NULL en un índice
+  // único) y el token cifrado para volver a mandarle el enlace cuando le responden.
+  accessTokenHash String?               @db.Char(64)
+  accessTokenEnc  String?               @db.VarChar(200)
+  contactedAt     DateTime?
+  contactedById   Int?
+  contactedBy     User?                 @relation("PrayerContactedBy", fields: [contactedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  deletedAt       DateTime?
+  prayers         PrayerRequestPrayer[]
+  replies         PrayerReply[]
 
   @@index([accountId, status, createdAt])
   @@index([accountId, createdById])
+  @@index([accountId, source, createdAt])
+  @@index([accessTokenHash])
 }
 
 // "Estoy orando": uno por usuario y petición.
@@ -33,4 +55,21 @@ model PrayerRequestPrayer {
 
   @@id([requestId, userId])
   @@index([userId])
+}
+
+// Respuestas escritas a una petición: entre quien la pidió y el equipo que la atiende (pastores y, si
+// es "para el líder", su líder). authorId null = quien la pidió desde su enlace (sin usuario).
+model PrayerReply {
+  id        Int           @id @default(autoincrement())
+  accountId Int
+  account   Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestId Int
+  request   PrayerRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  body      String        @db.NVarChar(1000)
+  authorId  Int?
+  author    User?         @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt DateTime      @default(now())
+
+  @@index([accountId, requestId, createdAt])
+  @@index([authorId])
 }

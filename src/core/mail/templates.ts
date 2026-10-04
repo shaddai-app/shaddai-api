@@ -214,3 +214,74 @@ export function securityAlertMail(
     html: layout(c.subject, paragraphs, { label: c.action, url: data.url }),
   };
 }
+
+const prayerCopy = {
+  es: {
+    hello: (name: string | null) => (name ? `Hola ${name}:` : 'Hola:'),
+    link: {
+      subject: (church: string) => `Tu petición de oración en ${church}`,
+      body: (church: string) =>
+        `Recibimos tu petición de oración en ${church}. Desde este enlace vas a ver las respuestas, contestar y contarnos cuando Dios responda.`,
+      keep: 'Guardalo: es tu forma de volver a tu petición. No lo compartas con quien no quieras que la lea.',
+      action: 'Ver mi petición',
+    },
+    reply: {
+      subject: (church: string) => `Te respondieron desde ${church}`,
+      body: (church: string) => `Te escribieron desde ${church} en tu petición de oración.`,
+      action: 'Leer la respuesta',
+    },
+  },
+  en: {
+    hello: (name: string | null) => (name ? `Hi ${name},` : 'Hi,'),
+    link: {
+      subject: (church: string) => `Your prayer request at ${church}`,
+      body: (church: string) =>
+        `We received your prayer request at ${church}. From this link you can see the replies, answer them and tell us when God answers.`,
+      keep: "Keep it: it's how you get back to your request. Don't share it with anyone you don't want to read it.",
+      action: 'See my request',
+    },
+    reply: {
+      subject: (church: string) => `${church} replied to you`,
+      body: (church: string) => `Someone from ${church} wrote to you on your prayer request.`,
+      action: 'Read the reply',
+    },
+  },
+  pt: {
+    hello: (name: string | null) => (name ? `Olá ${name},` : 'Olá,'),
+    link: {
+      subject: (church: string) => `Seu pedido de oração em ${church}`,
+      body: (church: string) =>
+        `Recebemos seu pedido de oração em ${church}. Por este link você vê as respostas, responde e nos conta quando Deus responder.`,
+      keep: 'Guarde-o: é a sua forma de voltar ao seu pedido. Não o compartilhe com quem você não quer que o leia.',
+      action: 'Ver meu pedido',
+    },
+    reply: {
+      subject: (church: string) => `${church} respondeu a você`,
+      body: (church: string) => `Escreveram para você de ${church} no seu pedido de oração.`,
+      action: 'Ler a resposta',
+    },
+  },
+} as const;
+
+/**
+ * Mails a quien pidió oración sin usuario: el enlace privado al enviarla y el aviso de una respuesta.
+ * El texto de la petición y de las respuestas nunca va en el mail.
+ */
+export function prayerMail(
+  locale: MailLocale,
+  kind: 'link' | 'reply',
+  data: { name: string | null; church: string; url: string },
+) {
+  const c = prayerCopy[locale];
+  const k = c[kind];
+  const paragraphs =
+    kind === 'link'
+      ? [c.hello(data.name), c.link.body(data.church), c.link.keep]
+      : [c.hello(data.name), c.reply.body(data.church)];
+  const subject = k.subject(data.church);
+  return {
+    subject,
+    text: [...paragraphs, '', `${k.action}: ${data.url}`].join('\n'),
+    html: layout(subject, paragraphs, { label: k.action, url: data.url }),
+  };
+}
