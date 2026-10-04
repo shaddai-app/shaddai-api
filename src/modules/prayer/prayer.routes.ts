@@ -47,3 +47,23 @@ t.put('/prayer-requests/:id/praying', 'account-user', async (req, res) => {
 t.delete('/prayer-requests/:id/praying', 'account-user', async (req, res) => {
   res.json(await prayer.stopPraying(await viewer(req), parse(IdParam, req.params).id));
 });
+
+// Respuestas escritas: solo el autor y el equipo que la atiende (lo valida el servicio).
+t.get('/prayer-requests/:id/replies', 'account-user', async (req, res) => {
+  res.json(await prayer.listReplies(await viewer(req), parse(IdParam, req.params).id));
+});
+
+t.post('/prayer-requests/:id/replies', 'account-user', async (req, res) => {
+  const { id } = parse(IdParam, req.params);
+  const input = parse(prayer.ReplySchema, req.body);
+  res.status(201).json(await prayer.addReply(await viewer(req), id, input));
+});
+
+// Las del formulario que pidieron contacto: quién y cuándo las contactó.
+t.put('/prayer-requests/:id/contacted', 'oracion.pastoral', async (req, res) => {
+  res.json(await prayer.setContacted(await viewer(req), parse(IdParam, req.params).id, true));
+});
+
+t.delete('/prayer-requests/:id/contacted', 'oracion.pastoral', async (req, res) => {
+  res.json(await prayer.setContacted(await viewer(req), parse(IdParam, req.params).id, false));
+});

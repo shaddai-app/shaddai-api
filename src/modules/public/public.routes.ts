@@ -2,11 +2,16 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { audit } from '../../core/audit/audit.js';
+import { generateOpaqueToken } from '../../core/auth/tokens.js';
 import { prisma } from '../../core/db/prisma.js';
 import { tenantClientFor } from '../../core/db/tenant.js';
 import { AppError } from '../../core/http/errors.js';
 import { parse } from '../../core/http/validate.js';
-import { publicFormLimiter, publicReadLimiter } from '../../core/middleware/rate-limit.js';
+import {
+  publicFormLimiter,
+  publicReadLimiter,
+  publicReplyLimiter,
+} from '../../core/middleware/rate-limit.js';
 import { verifyTurnstile } from '../../core/security/turnstile.js';
 import { storage } from '../../core/storage/storage.js';
 import { CONSENT_VERSION, dateOnly } from '../people/people.schemas.js';
@@ -14,6 +19,8 @@ import { normalizePhone } from '../people/people.service.js';
 import { createRegistration, publicEvent } from '../calendar/registrations.service.js';
 import { runInContext } from '../../core/context.js';
 import { DEFAULT_TRIAL_DAYS } from '../platform/platform.schemas.js';
+import * as publicPrayer from '../prayer/public-prayer.service.js';
+import { ReplySchema } from '../prayer/prayer.service.js';
 
 /** Endpoints sin sesión. Nunca revelan si una iglesia existe pero está suspendida. */
 export const publicRouter = Router();
@@ -228,4 +235,66 @@ publicRouter.post('/public/:slug/events/:id/register', publicFormLimiter, async 
   );
   // Solo lo necesario: no se devuelven datos de otros inscriptos.
   res.status(201).json({ status: registration.status });
+});
+
+// ───────────── Pedidos de oración sin usuario (QR) ─────────────
+
+const PrayerLinkParams = SlugParam.extend({ token: publicPrayer.TokenParam });
+
+const churchOf = (account: Awaited<ReturnType<typeof publicAccount>>) => ({
+  name: account.name,
+  slug: account.slug,
+  logoUrl: account.logoFileId ? `/api/v1/public/${account.slug}/logo` : null,
+  defaultLocale: account.defaultLocale,
+  primaryColor: account.primaryColor,
+});
+
+publicRouter.get('/public/:slug/prayer-form', publicReadLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  res.json({
+    church: churchOf(account),
+    consentVersion: CONSENT_VERSION,
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? null,
+  });
+});
+
+publicRouter.post('/public/:slug/prayer', publicFormLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const input = parse(publicPrayer.PublicPrayerSchema, req.body);
+  // Bot: se responde como si hubiera salido bien, con un token que no lleva a ningún lado.
+  if (input.website) {
+    res.status(201).json({ token: generateOpaqueToken() });
+    return;
+  }
+  if (!(await verifyTurnstile(input.turnstileToken, req.ip))) throw AppError.badRequest('CAPTCHA_FAILED');
+  const { turnstileToken: _t, website: _w, ...data } = input;
+  res.status(201).json(await asChurch(req, account.id, () => publicPrayer.submit(data)));
+});
+
+publicRouter.get('/public/:slug/prayer/:token', publicReadLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { token } = parse(PrayerLinkParams, req.params);
+  const request = await asChurch(req, account.id, () => publicPrayer.view(token));
+  res.json({ church: churchOf(account), request });
+});
+
+publicRouter.post('/public/:slug/prayer/:token/replies', publicReplyLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { token } = parse(PrayerLinkParams, req.params);
+  const input = parse(ReplySchema, req.body);
+  res.status(201).json(await asChurch(req, account.id, () => publicPrayer.reply(token, input)));
+});
+
+publicRouter.patch('/public/:slug/prayer/:token', publicReplyLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { token } = parse(PrayerLinkParams, req.params);
+  const input = parse(publicPrayer.PublicPrayerUpdateSchema, req.body);
+  res.json(await asChurch(req, account.id, () => publicPrayer.update(token, input)));
+});
+
+publicRouter.delete('/public/:slug/prayer/:token', publicReplyLimiter, async (req, res) => {
+  const account = await publicAccount(req);
+  const { token } = parse(PrayerLinkParams, req.params);
+  await asChurch(req, account.id, () => publicPrayer.withdraw(token));
+  res.status(204).end();
 });

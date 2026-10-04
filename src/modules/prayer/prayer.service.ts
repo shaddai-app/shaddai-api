@@ -1,15 +1,24 @@
 import { z } from 'zod';
 import { Prisma } from '../../generated/prisma/client.js';
+import { env } from '../../config/env.js';
 import { audit } from '../../core/audit/audit.js';
+import { decryptSecret } from '../../core/auth/totp.js';
 import { currentAccountId, tenantDb } from '../../core/db/tenant.js';
 import { AppError } from '../../core/http/errors.js';
 import { paged, PaginationQuery, toSkipTake } from '../../core/http/pagination.js';
+import { sendMail } from '../../core/mail/mailer.js';
+import { prayerMail, resolveMailLocale } from '../../core/mail/templates.js';
+import { reportError } from '../../core/observability/sentry.js';
 import { getPermissions } from '../../core/rbac/permission-cache.js';
 import { notify } from '../notifications/notifications.service.js';
 
 // Peticiones de oración. Cada una la ven su autor, quien tiene oracion.pastoral y, según la
 // visibilidad, toda la iglesia (public) o el líder y colíder de la célula del autor (leader). Las
 // "pastors" no las ve nadie más. El texto nunca va en avisos ni en la auditoría.
+//
+// Las del formulario público (source = form) no tienen autor con usuario: nacen "pastors" y quien
+// pidió vuelve con su enlace privado (public-prayer.service.ts). Las respuestas escritas son privadas
+// entre el autor y el equipo que la atiende: oracion.pastoral y, si es "leader", su líder.
 
 export const VISIBILITIES = ['public', 'pastors', 'leader'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
@@ -33,8 +42,10 @@ export const UpdatePrayerSchema = z
   .partial()
   .strict();
 
+export const ReplySchema = z.object({ body: z.string().trim().min(1).max(1000) }).strict();
+
 export const PrayerQuery = PaginationQuery.extend({
-  tab: z.enum(['open', 'answered', 'mine']).default('open'),
+  tab: z.enum(['open', 'answered', 'mine', 'received']).default('open'),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
@@ -78,23 +89,69 @@ const select = (viewerId: number) =>
     answeredAt: true,
     testimony: true,
     createdAt: true,
+    source: true,
+    requesterName: true,
+    requesterPhone: true,
+    requesterEmail: true,
+    wantsContact: true,
+    wallShare: true,
+    contactedAt: true,
+    contactedBy: { select: { firstName: true, lastName: true } },
     createdBy: { select: { id: true, firstName: true, lastName: true } },
     prayers: { where: { userId: viewerId }, select: { userId: true } },
-    _count: { select: { prayers: true } },
+    _count: { select: { prayers: true, replies: true } },
   }) satisfies Prisma.PrayerRequestSelect;
 
 type Row = Prisma.PrayerRequestGetPayload<{ select: ReturnType<typeof select> }>;
 
+const fullName = (u: { firstName: string; lastName: string }) => `${u.firstName} ${u.lastName}`;
+
+/**
+ * El equipo que la atiende: quien tiene oracion.pastoral o, si es "para el líder", su líder. Si la
+ * ve alguien que no es el autor ni pastor y es "leader", es porque lidera la célula del autor.
+ */
+const isTeam = (row: Pick<Row, 'visibility'>, v: Viewer, mine: boolean) =>
+  v.pastoral || (row.visibility === 'leader' && !mine);
+
 function present(row: Row, v: Viewer) {
-  const { createdBy, prayers, _count, ...rest } = row;
-  const mine = createdBy.id === v.userId;
+  const {
+    createdBy,
+    prayers,
+    _count,
+    requesterName,
+    requesterPhone,
+    requesterEmail,
+    wantsContact,
+    wallShare,
+    contactedAt,
+    contactedBy,
+    ...rest
+  } = row;
+  const mine = createdBy?.id === v.userId;
+  const team = isTeam(row, v, mine);
+  const name = createdBy ? fullName(createdBy) : requesterName;
   const hideAuthor = row.anonymous && !mine && !v.pastoral;
   return {
     ...rest,
-    author: hideAuthor ? null : { id: createdBy.id, name: `${createdBy.firstName} ${createdBy.lastName}` },
+    author: hideAuthor || !name ? null : { id: createdBy?.id ?? null, name },
     mine,
     prayerCount: _count.prayers,
     praying: prayers.length > 0,
+    canReply: mine || team,
+    replyCount: mine || team ? _count.replies : 0,
+    // Datos de quien pidió por el formulario: solo para el equipo (nunca en el muro).
+    requester:
+      team && row.source === 'form'
+        ? {
+            name: requesterName,
+            phone: requesterPhone,
+            email: requesterEmail,
+            wantsContact,
+            wallShare,
+            contactedAt,
+            contactedBy: contactedBy ? fullName(contactedBy) : null,
+          }
+        : null,
   };
 }
 
@@ -102,7 +159,9 @@ export async function list(v: Viewer, query: z.infer<typeof PrayerQuery>) {
   const where: Prisma.PrayerRequestWhereInput =
     query.tab === 'mine'
       ? { deletedAt: null, createdById: v.userId }
-      : { ...visibleWhere(v), status: query.tab };
+      : query.tab === 'received'
+        ? { ...visibleWhere(v), source: 'form' }
+        : { ...visibleWhere(v), status: query.tab };
   const db = tenantDb();
   const [rows, total] = await Promise.all([
     db.prayerRequest.findMany({
@@ -159,7 +218,7 @@ export async function context(v: Viewer) {
   return { leaders: leaders.map((l) => `${l.firstName} ${l.lastName}`), pastoral: v.pastoral };
 }
 
-async function pastors(exceptId: number) {
+export async function pastors(exceptId?: number) {
   const users = await tenantDb().user.findMany({
     where: { isActive: true, deletedAt: null, id: { not: exceptId } },
     select: { id: true },
@@ -216,7 +275,7 @@ export async function create(v: Viewer, input: z.infer<typeof CreatePrayerSchema
 /** Solo el autor la edita, la marca respondida (con testimonio opcional) o la reabre. */
 export async function update(v: Viewer, id: number, input: z.infer<typeof UpdatePrayerSchema>) {
   const before = await findVisible(v, id);
-  if (before.createdBy.id !== v.userId) throw AppError.forbidden('PRAYER_NOT_AUTHOR');
+  if (before.createdBy?.id !== v.userId) throw AppError.forbidden('PRAYER_NOT_AUTHOR');
   const visibility = input.visibility ?? (before.visibility as Visibility);
   if (visibility !== before.visibility) await assertLeader(v.userId, visibility);
   const status = input.status ?? before.status;
@@ -244,7 +303,7 @@ export async function update(v: Viewer, id: number, input: z.infer<typeof Update
 /** El autor o quien tiene oracion.pastoral (moderación del muro). */
 export async function remove(v: Viewer, id: number) {
   const row = await findVisible(v, id);
-  if (row.createdBy.id !== v.userId && !v.pastoral) throw AppError.forbidden('PRAYER_NOT_AUTHOR');
+  if (row.createdBy?.id !== v.userId && !v.pastoral) throw AppError.forbidden('PRAYER_NOT_AUTHOR');
   await tenantDb().prayerRequest.update({ where: { id }, data: { deletedAt: new Date() } });
   await audit({ action: 'prayer.delete', entity: 'PrayerRequest', entityId: id });
 }
@@ -257,7 +316,8 @@ export async function startPraying(v: Viewer, id: number) {
   } catch (err) {
     if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
   }
-  if (row.createdBy.id !== v.userId) {
+  // Las del formulario no tienen a quién avisar: quien pidió ve el contador en su enlace.
+  if (row.createdBy && row.createdBy.id !== v.userId) {
     const me = await tenantDb().user.findUniqueOrThrow({
       where: { id: v.userId },
       select: { firstName: true, lastName: true },
@@ -282,4 +342,177 @@ export async function stopPraying(v: Viewer, id: number) {
 async function prayerState(v: Viewer, id: number) {
   const row = await findVisible(v, id);
   return { prayerCount: row._count.prayers, praying: row.prayers.length > 0 };
+}
+
+// ───────────── Respuestas escritas ─────────────
+
+const replySelect = {
+  id: true,
+  body: true,
+  createdAt: true,
+  authorId: true,
+  author: { select: { firstName: true, lastName: true } },
+} satisfies Prisma.PrayerReplySelect;
+
+type ReplyRow = Prisma.PrayerReplyGetPayload<{ select: typeof replySelect }>;
+
+/** authorId null = quien pidió desde su enlace; el autor con usuario también cuenta como quien pidió. */
+export function presentReply(
+  r: ReplyRow,
+  request: { createdById: number | null; requesterName: string | null },
+  viewerId: number | null,
+) {
+  return {
+    id: r.id,
+    body: r.body,
+    createdAt: r.createdAt,
+    fromRequester: r.authorId === null || r.authorId === request.createdById,
+    mine: viewerId !== null && r.authorId === viewerId,
+    author: r.author ? fullName(r.author) : request.requesterName,
+  };
+}
+
+export const repliesOf = (requestId: number) =>
+  tenantDb().prayerReply.findMany({
+    where: { requestId },
+    select: replySelect,
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+
+/** La petición, si quien mira es su autor o del equipo que la atiende (los demás no ven respuestas). */
+async function findForReplies(v: Viewer, id: number) {
+  const row = await findVisible(v, id);
+  const mine = row.createdBy?.id === v.userId;
+  if (!mine && !isTeam(row, v, mine)) throw AppError.forbidden('PRAYER_REPLY_FORBIDDEN');
+  return { row, mine };
+}
+
+export async function listReplies(v: Viewer, id: number) {
+  const { row } = await findForReplies(v, id);
+  const request = { createdById: row.createdBy?.id ?? null, requesterName: row.requesterName };
+  return (await repliesOf(id)).map((r) => presentReply(r, request, v.userId));
+}
+
+/**
+ * Cuando contesta quien pidió: a los del equipo que ya respondieron y, si es "para el líder", a su
+ * líder; si nadie respondió todavía, a los pastores.
+ */
+export async function notifyTeamOfReply(
+  request: { id: number; visibility: string; createdById: number | null },
+  person: string | null,
+  replyId: number,
+) {
+  const prior = await tenantDb().prayerReply.findMany({
+    where: { requestId: request.id, authorId: { not: null } },
+    select: { authorId: true },
+  });
+  const ids = new Set(prior.map((r) => r.authorId!));
+  if (request.visibility === 'leader' && request.createdById) {
+    for (const leader of await leadersOf(request.createdById)) ids.add(leader.id);
+  }
+  if (request.createdById) ids.delete(request.createdById);
+  const userIds = ids.size ? [...ids] : await pastors(request.createdById ?? undefined);
+  await notify({
+    userIds,
+    type: 'prayer.reply',
+    params: { person, mine: 0 },
+    link: `/oracion/${request.id}`,
+    dedupeKey: `prayer:${request.id}:reply:${replyId}`,
+  });
+}
+
+/** El enlace privado de quien pidió por el formulario (el token se guarda cifrado para esto). */
+async function requesterLink(id: number) {
+  const row = await tenantDb().prayerRequest.findUniqueOrThrow({
+    where: { id },
+    select: { accessTokenEnc: true },
+  });
+  const account = await tenantDb().account.findUniqueOrThrow({
+    where: { id: currentAccountId() },
+    select: { slug: true },
+  });
+  return `${env.APP_URL}/orar/${account.slug}/${decryptSecret(row.accessTokenEnc!)}`;
+}
+
+/** Mail a quien pidió sin usuario (en la demo no sale: lo corta sendMail). Sin el texto. */
+export async function mailRequester(
+  request: {
+    id: number;
+    requesterEmail: string | null;
+    requesterName: string | null;
+    requesterLocale: string | null;
+  },
+  kind: 'link' | 'reply',
+) {
+  if (!request.requesterEmail) return;
+  const account = await tenantDb().account.findUniqueOrThrow({
+    where: { id: currentAccountId() },
+    select: { name: true, defaultLocale: true },
+  });
+  const locale = resolveMailLocale(request.requesterLocale, account.defaultLocale);
+  const url = await requesterLink(request.id);
+  try {
+    await sendMail({
+      to: request.requesterEmail,
+      ...prayerMail(locale, kind, { name: request.requesterName, church: account.name, url }),
+    });
+  } catch (err) {
+    // Un mail que no sale no deshace la petición ni la respuesta.
+    reportError(err, { where: 'prayer.mailRequester', requestId: request.id });
+  }
+}
+
+export async function addReply(v: Viewer, id: number, input: z.infer<typeof ReplySchema>) {
+  const { row, mine } = await findForReplies(v, id);
+  const reply = await tenantDb().prayerReply.create({
+    data: { accountId: currentAccountId(), requestId: id, body: input.body, authorId: v.userId },
+    select: replySelect,
+  });
+  await audit({
+    action: 'prayer.reply',
+    entity: 'PrayerReply',
+    entityId: reply.id,
+    after: { requestId: id },
+  });
+  const request = { id, visibility: row.visibility, createdById: row.createdBy?.id ?? null };
+  const me = reply.author ? fullName(reply.author) : null;
+  if (mine) {
+    await notifyTeamOfReply(request, me, reply.id);
+  } else if (row.createdBy) {
+    await notify({
+      userIds: [row.createdBy.id],
+      type: 'prayer.reply',
+      params: { person: me, mine: 1 },
+      link: `/oracion/${id}`,
+      dedupeKey: `prayer:${id}:reply:${reply.id}`,
+    });
+  } else {
+    const contact = await tenantDb().prayerRequest.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, requesterEmail: true, requesterName: true, requesterLocale: true },
+    });
+    await mailRequester(contact, 'reply');
+  }
+  return presentReply(
+    reply,
+    { createdById: request.createdById, requesterName: row.requesterName },
+    v.userId,
+  );
+}
+
+/** "Contactado" en las del formulario que pidieron contacto: queda el primero que lo marcó. */
+export async function setContacted(v: Viewer, id: number, contacted: boolean) {
+  const row = await findVisible(v, id);
+  if (row.source !== 'form') throw AppError.badRequest('PRAYER_NOT_FORM');
+  // Condicionado: si dos lo marcan a la vez, el segundo no pisa al primero.
+  const { count } = await tenantDb().prayerRequest.updateMany({
+    where: { id, contactedAt: contacted ? null : { not: null } },
+    data: contacted
+      ? { contactedAt: new Date(), contactedById: v.userId }
+      : { contactedAt: null, contactedById: null },
+  });
+  if (count) {
+    await audit({ action: 'prayer.contacted', entity: 'PrayerRequest', entityId: id, after: { contacted } });
+  }
+  return get(v, id);
 }

@@ -59,6 +59,7 @@ export const TENANT_MODELS = new Set([
   'DailyJobRun',
   'Announcement',
   'PrayerRequest',
+  'PrayerReply',
   'Course',
   'CourseLevel',
   'CourseEnrollment',

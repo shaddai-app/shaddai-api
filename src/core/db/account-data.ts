@@ -13,6 +13,7 @@ export const ACCOUNT_DATA: readonly { model: string; export: boolean }[] = [
   { model: 'Invoice', export: true },
   { model: 'Subscription', export: true },
   { model: 'DailyJobRun', export: false },
+  { model: 'PrayerReply', export: true },
   { model: 'PrayerRequestPrayer', export: true },
   { model: 'PrayerRequest', export: true },
   { model: 'CourseAttendance', export: true },
@@ -81,6 +82,7 @@ export const ACCOUNT_DATA: readonly { model: string; export: boolean }[] = [
 /** Columnas que nunca salen en la exportación (credenciales y estado de seguridad). */
 const OMIT: Record<string, string[]> = {
   User: ['passwordHash', 'totpSecretEnc', 'failedLoginCount', 'lockoutLevel', 'lockedUntil'],
+  PrayerRequest: ['accessTokenHash', 'accessTokenEnc'],
 };
 
 type Delegate = {

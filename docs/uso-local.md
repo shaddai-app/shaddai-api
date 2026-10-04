@@ -26,7 +26,7 @@ Con `SEED_DEMO=true` en el `.env` de la API, el seed crea **Iglesia Demo** con d
 - **Finanzas**: cajas, unos 3 meses de movimientos, arqueos y cierres.
 - **Calendario y ministerios**: eventos con inscripciones, ministerios con turnos, canciones y listas.
 - **Inventario**: equipos y préstamos.
-- **Comunicación**: anuncios y peticiones de oración.
+- **Comunicación**: anuncios y peticiones de oración, incluidos pedidos del formulario público con su conversación.
 - **Discipulado**: Escuela de líderes con clases y asistencia, y Clases de bautismo.
 
 ```powershell
@@ -83,7 +83,7 @@ Unos 20 minutos, de lo más visible a lo más administrativo:
 4. **Mi célula** (líder, desde el celular): cargar el reporte semanal con asistencia y ofrenda. También funciona sin señal: lo manda cuando vuelve la conexión.
 5. **Nuevos**: el formulario "Soy nuevo" con QR, y cómo cae en la bandeja y en el tablero de seguimiento.
 6. **Calendario y ministerios**: eventos, inscripciones y turnos del equipo de alabanza.
-7. **Oración y anuncios**: el muro de oración, una petición "para mi líder" y un anuncio para un ministerio.
+7. **Oración y anuncios**: el muro de oración, una petición "para mi líder" y un anuncio para un ministerio. Después, el **pedido de oración sin usuario**: escanear el QR de Oración → Recibidas (`/orar/iglesia-demo`), dejar un pedido, abrir el enlace privado y ver cómo le responde el pastor (la conversación de Lucía Fernández ya viene cargada). En la demo no salen mails: el enlace se copia desde la pantalla de "¡Recibimos tu pedido!".
 8. **Discipulado**: los niveles, tomar asistencia de una clase y completar un nivel, que carga el hito en la ficha.
 9. **Finanzas** (tesorero): un arqueo de ofrendas, el cierre de mes y un reporte.
 10. **Administración** (admin): roles y permisos, con la matriz; idioma y tema (claro u oscuro); colores de la iglesia.
